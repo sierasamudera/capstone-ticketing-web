@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tiket TK-002</title>
+<script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();</script>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config = tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: {
+      fontFamily: { sans: ['system-ui','-apple-system','"Segoe UI"','sans-serif'],
+                    mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] },
+      colors: {
+        canvas: { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+        panel:  { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+        panel2: { DEFAULT: '#ffffff', dark: '#232321' },
+        ink:    { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+        ink2:   { DEFAULT: '#52514e', dark: '#c3c2b7' },
+        muted:  { DEFAULT: '#898781', dark: '#898781' },
+        line:   { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+        accent: { DEFAULT: '#2a78d6', dark: '#3987e5' },
+        good:   { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+        warn:   { DEFAULT: '#b26a00', dark: '#eda100' },
+        danger: { DEFAULT: '#d03b3b', dark: '#e66767' },
+      },
+    } },
+  };;</script>
+<style>
+
+/* Variabel chart — nilai hex adalah palette dataviz yang sudah divalidasi
+   (CVD-safe). Definisi dark mengikuti .dark pada <html> (toggle Alpine). */
+.viz-root {
+  color-scheme: light;
+  --viz-surface: #fcfcfb; --viz-primary: #0b0b0b; --viz-secondary: #52514e;
+  --viz-muted: #898781; --viz-gridline: #e1e0d9; --viz-baseline: #c3c2b7;
+  --viz-border: rgba(11,11,11,0.10);
+  --viz-series-1: #2a78d6; --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a; --viz-series-4: #eda100;
+}
+html.dark .viz-root {
+  color-scheme: dark;
+  --viz-surface: #1a1a19; --viz-primary: #ffffff; --viz-secondary: #c3c2b7;
+  --viz-muted: #898781; --viz-gridline: #2c2c2a; --viz-baseline: #383835;
+  --viz-border: rgba(255,255,255,0.10);
+  --viz-series-1: #3987e5; --viz-series-2: #d95926;
+  --viz-series-3: #199e70; --viz-series-4: #c98500;
+}
+.viz-chart { width: 100%; height: auto; display: block; border: 1px solid var(--viz-border); border-radius: 8px; }
+.viz-title { font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-axis { font: 11px/1 system-ui, sans-serif; }
+.viz-cat { font: 600 12px/1.2 system-ui, sans-serif; }
+.viz-total { font: 10px/1 system-ui, sans-serif; }
+.viz-value { font: 10px/1 system-ui, sans-serif; }
+.viz-legend-text { font: 12px/1.2 system-ui, sans-serif; }
+.viz-mark { cursor: pointer; }
+.viz-mark:hover rect, .viz-mark:focus-visible rect { stroke: var(--viz-primary); stroke-width: 1.5; }
+
+
+[x-cloak] { display: none !important; }
+.tbl { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:.8125rem; }
+.tbl th { padding:.375rem .5rem; text-align:left; font-weight:600; white-space:nowrap;
+          color:#52514e; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl th { color:#c3c2b7; border-color:#2c2c2a; }
+.tbl td { padding:.375rem .5rem; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl td { border-color:#2c2c2a; }
+.tbl td.num, .tbl th.num { text-align:right; }
+.tbl tbody tr:hover td { background:#ffffff; }
+html.dark .tbl tbody tr:hover td { background:#232321; }
+
+</style>
+
+<script>const APP_ROOT = "../../";</script>
+<script src="../../_auth.js"></script>
+<script src="../../_data.js"></script>
+<script>requireRole('pelapor');</script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased p-4 sm:p-6 lg:p-8">
+<div class="max-w-6xl mx-auto">
+<header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+  <div class="flex items-center gap-3">
+    <h1 class="text-xl font-bold tracking-tight">Tiket TK-002</h1>
+    <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
+                 bg-accent/15 text-accent dark:text-accent-dark border border-accent/30">MOCKUP</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="inline-flex items-center px-3 py-1 rounded-full border border-line dark:border-line-dark text-xs text-ink2 dark:text-ink2-dark">
+      <span id="nav-user">Admin Helpdesk</span> · <strong>pelapor</strong>
+    </span>
+    <button type="button" onclick="logout()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors"
+            >
+      Logout
+    </button>
+    <button type="button"
+            x-data="{ dark: document.documentElement.classList.contains('dark') }"
+            @click="dark = !dark; document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light')"
+            :aria-pressed="dark.toString()" aria-label="Ganti tema terang/gelap" title="Ganti tema"
+            class="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-line dark:border-line-dark bg-panel dark:bg-panel-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors">
+      <svg x-show="!dark" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 19 19m0-14-1.5 1.5M6.5 17.5 5 19"/></svg>
+      <svg x-show="dark" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    </button>
+  </div>
+</header>
+<nav class="flex flex-wrap gap-2 mb-4">
+  <a href="../../pelapor/dashboard.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Tiket Saya</a><a href="../../pelapor/tiket-baru.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Buat Tiket</a>
+</nav>
+<p class="text-xs text-muted dark:text-muted-dark mb-6">
+  Data asli dari mesin simulasi (identik dengan Excel, 42/42 cek). Status alur
+  kerja tiket (Open → In Progress → Resolved) adalah <strong>usulan</strong> —
+  belum ada di mesin Excel.
+</p>
+
+<div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="lg:col-span-2 space-y-4">
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      <div class="flex items-center justify-between">
+        <div class="flex items-center gap-3">
+          <span class="font-mono text-xl font-bold">TK-002</span>
+          <span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-line/40 text-ink2 dark:text-ink2-dark">Technician Request</span>
+          <span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">High</span>
+          <span data-status data-ticket-id="TK-002" data-default="Open"><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-warn/10 text-warn dark:text-warn-dark">Open</span></span>
+        </div>
+        <a href="../../pelapor/dashboard.html" class="text-sm text-ink2 dark:text-ink2-dark hover:underline">← kembali</a>
+      </div>
+      <p class="mt-3 text-sm">T02 minta bantuan cek beban server untuk kasus T-015 (jaringan lambat)</p>
+      <div class="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Kategori</div>Network</div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Prioritas</div>High (bobot 3)</div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Waktu masuk</div><span class="font-mono">2026-09-23 12:35</span></div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Estimasi durasi</div>30 menit</div>
+      </div>
+    </div>
+
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      <h2 class="text-base font-semibold mb-3">Penanganan</h2>
+      
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm">
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Teknisi</div><span class="font-mono font-semibold">T04</span></div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Mulai</div><span class="font-mono">12:35</span></div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Selesai</div><span class="font-mono">13:05</span></div>
+        <div><div class="text-[10px] uppercase tracking-wide text-muted dark:text-muted-dark">Menunggu</div>0 menit</div>
+      </div>
+      <p class="mt-3 text-xs text-muted dark:text-muted-dark">Available + beban kumulatif (menit) terendah; tie-breaker ID</p>
+      <p class="mt-2 text-xs text-muted dark:text-muted-dark">
+        Aturan penugasan: mesin S2 (Lowest Cumulative Workload).
+      </p>
+    </div>
+  </div>
+
+  <div>
+    <h2 class="text-base font-semibold mb-3">Riwayat</h2>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      <ol class="space-y-3 text-sm">
+        <li class="flex gap-3"><span class="mt-1 w-2 h-2 rounded-full bg-accent shrink-0"></span><div><div class="font-medium">Tiket dibuat</div><div class="text-xs text-muted dark:text-muted-dark">12:35 oleh Admin</div></div></li><li class="flex gap-3"><span class="mt-1 w-2 h-2 rounded-full bg-warn shrink-0"></span><div><div class="font-medium">Ditugaskan ke T04</div><div class="text-xs text-muted dark:text-muted-dark">mesin S2 · Available + beban kumulatif (menit) terendah; tie-breaker ID</div></div></li><li class="flex gap-3"><span class="mt-1 w-2 h-2 rounded-full bg-good shrink-0"></span><div><div class="font-medium">Dikerjakan</div><div class="text-xs text-muted dark:text-muted-dark">status alur kerja (usulan)</div></div></li>
+      </ol>
+      <p class="mt-4 text-xs text-muted dark:text-muted-dark">
+        Riwayat status (usulan) — mesin Excel belum menyimpan perubahan status.
+      </p>
+    </div>
+  </div>
+</div>
+
+<footer class="mt-10 text-xs text-muted dark:text-muted-dark">
+  v1.0.0 · Mockup statis tanpa server. Indikator pemerataan &amp; skenario S4
+  adalah usulan yang perlu validasi dosen.
+</footer>
+</div>
+<script>
+  // isi chip user dari session
+  (function() {
+    var s = session();
+    var el = document.getElementById('nav-user');
+    if (s && el) el.textContent = s.username;
+  })();
+</script>
+</body>
+</html>

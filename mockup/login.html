@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Masuk</title>
+<script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();</script>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config = tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: {
+      fontFamily: { sans: ['system-ui','-apple-system','"Segoe UI"','sans-serif'],
+                    mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] },
+      colors: {
+        canvas: { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+        panel:  { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+        panel2: { DEFAULT: '#ffffff', dark: '#232321' },
+        ink:    { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+        ink2:   { DEFAULT: '#52514e', dark: '#c3c2b7' },
+        muted:  { DEFAULT: '#898781', dark: '#898781' },
+        line:   { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+        accent: { DEFAULT: '#2a78d6', dark: '#3987e5' },
+        good:   { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+        warn:   { DEFAULT: '#b26a00', dark: '#eda100' },
+        danger: { DEFAULT: '#d03b3b', dark: '#e66767' },
+      },
+    } },
+  };;</script>
+<style>
+
+/* Variabel chart — nilai hex adalah palette dataviz yang sudah divalidasi
+   (CVD-safe). Definisi dark mengikuti .dark pada <html> (toggle Alpine). */
+.viz-root {
+  color-scheme: light;
+  --viz-surface: #fcfcfb; --viz-primary: #0b0b0b; --viz-secondary: #52514e;
+  --viz-muted: #898781; --viz-gridline: #e1e0d9; --viz-baseline: #c3c2b7;
+  --viz-border: rgba(11,11,11,0.10);
+  --viz-series-1: #2a78d6; --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a; --viz-series-4: #eda100;
+}
+html.dark .viz-root {
+  color-scheme: dark;
+  --viz-surface: #1a1a19; --viz-primary: #ffffff; --viz-secondary: #c3c2b7;
+  --viz-muted: #898781; --viz-gridline: #2c2c2a; --viz-baseline: #383835;
+  --viz-border: rgba(255,255,255,0.10);
+  --viz-series-1: #3987e5; --viz-series-2: #d95926;
+  --viz-series-3: #199e70; --viz-series-4: #c98500;
+}
+.viz-chart { width: 100%; height: auto; display: block; border: 1px solid var(--viz-border); border-radius: 8px; }
+.viz-title { font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-axis { font: 11px/1 system-ui, sans-serif; }
+.viz-cat { font: 600 12px/1.2 system-ui, sans-serif; }
+.viz-total { font: 10px/1 system-ui, sans-serif; }
+.viz-value { font: 10px/1 system-ui, sans-serif; }
+.viz-legend-text { font: 12px/1.2 system-ui, sans-serif; }
+.viz-mark { cursor: pointer; }
+.viz-mark:hover rect, .viz-mark:focus-visible rect { stroke: var(--viz-primary); stroke-width: 1.5; }
+
+
+[x-cloak] { display: none !important; }
+.tbl { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:.8125rem; }
+.tbl th { padding:.375rem .5rem; text-align:left; font-weight:600; white-space:nowrap;
+          color:#52514e; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl th { color:#c3c2b7; border-color:#2c2c2a; }
+.tbl td { padding:.375rem .5rem; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl td { border-color:#2c2c2a; }
+.tbl td.num, .tbl th.num { text-align:right; }
+.tbl tbody tr:hover td { background:#ffffff; }
+html.dark .tbl tbody tr:hover td { background:#232321; }
+
+</style>
+
+<script>const APP_ROOT = "./";</script>
+<script src="./_auth.js"></script>
+<script src="./_data.js"></script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased p-4 sm:p-6 lg:p-8">
+<div class="max-w-6xl mx-auto">
+<header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+  <div class="flex items-center gap-3">
+    <h1 class="text-xl font-bold tracking-tight">Masuk</h1>
+    <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
+                 bg-accent/15 text-accent dark:text-accent-dark border border-accent/30">MOCKUP</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="inline-flex items-center px-3 py-1 rounded-full border border-line dark:border-line-dark text-xs text-ink2 dark:text-ink2-dark">
+      <span id="nav-user">belum login</span>
+    </span>
+    <button type="button" onclick="logout()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors"
+            hidden>
+      Logout
+    </button>
+    <button type="button"
+            x-data="{ dark: document.documentElement.classList.contains('dark') }"
+            @click="dark = !dark; document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light')"
+            :aria-pressed="dark.toString()" aria-label="Ganti tema terang/gelap" title="Ganti tema"
+            class="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-line dark:border-line-dark bg-panel dark:bg-panel-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors">
+      <svg x-show="!dark" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 19 19m0-14-1.5 1.5M6.5 17.5 5 19"/></svg>
+      <svg x-show="dark" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    </button>
+  </div>
+</header>
+<nav class="flex flex-wrap gap-2 mb-4">
+  
+</nav>
+<p class="text-xs text-muted dark:text-muted-dark mb-6">
+  Data asli dari mesin simulasi (identik dengan Excel, 42/42 cek). Status alur
+  kerja tiket (Open → In Progress → Resolved) adalah <strong>usulan</strong> —
+  belum ada di mesin Excel.
+</p>
+
+<div class="max-w-md mx-auto">
+  <div class="rounded-2xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-6 shadow-sm">
+    <h2 class="text-lg font-bold">Masuk</h2>
+    <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">
+      Satu halaman untuk semua role. Setelah masuk, Anda dialihkan otomatis
+      sesuai role.
+    </p>
+    <form x-data="loginForm()" @submit.prevent="submit()"
+          class="mt-5 space-y-4">
+      <div>
+        <label for="username" class="block text-xs text-muted dark:text-muted-dark mb-1">Username</label>
+        <input id="username" type="text" x-model="username" autocomplete="off" required
+               class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+      </div>
+      <div>
+        <label for="password" class="block text-xs text-muted dark:text-muted-dark mb-1">Password</label>
+        <input id="password" type="password" x-model="password" placeholder="mockup — apa pun diterima" required
+               class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+      </div>
+      <p x-show="error" x-cloak class="text-sm text-danger dark:text-danger-dark" x-text="error"></p>
+      <button type="submit"
+              class="w-full rounded-md bg-accent dark:bg-accent-dark hover:brightness-110 text-white px-4 py-2.5 text-sm font-medium transition">
+        Masuk
+      </button>
+    </form>
+
+    <div class="mt-6 pt-5 border-t border-line dark:border-line-dark">
+      <div class="text-xs font-semibold text-ink2 dark:text-ink2-dark mb-2">Login cepat (demo)</div>
+      <div class="flex flex-wrap gap-2"><button type="button" onclick="quickLogin('admin')"
+                class="flex-1 min-w-[140px] rounded-lg border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark hover:bg-accent/5 hover:border-accent/40 px-3 py-2.5 text-left transition-colors">
+          <div class="text-sm font-semibold">Admin Helpdesk</div>
+          <div class="text-[11px] text-muted dark:text-muted-dark">@admin · admin</div>
+        </button>
+<button type="button" onclick="quickLogin('t01')"
+                class="flex-1 min-w-[140px] rounded-lg border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark hover:bg-accent/5 hover:border-accent/40 px-3 py-2.5 text-left transition-colors">
+          <div class="text-sm font-semibold">Teknisi A</div>
+          <div class="text-[11px] text-muted dark:text-muted-dark">@t01 · teknisi</div>
+        </button>
+<button type="button" onclick="quickLogin('pelapor')"
+                class="flex-1 min-w-[140px] rounded-lg border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark hover:bg-accent/5 hover:border-accent/40 px-3 py-2.5 text-left transition-colors">
+          <div class="text-sm font-semibold">Mahasiswa Contoh</div>
+          <div class="text-[11px] text-muted dark:text-muted-dark">@pelapor · pelapor</div>
+        </button></div>
+    </div>
+
+    <p class="mt-6 text-center text-sm text-ink2 dark:text-ink2-dark">
+      Belum punya akun?
+      <a href="./register.html" class="font-medium text-accent dark:text-accent-dark hover:underline">Daftar sebagai pelapor</a>
+    </p>
+  </div>
+  <p class="mt-4 text-center text-xs text-muted dark:text-muted-dark">
+    MOCKUP — tidak ada autentikasi nyata. Username menentukan role &amp; halaman tujuan.
+  </p>
+</div>
+<script>
+function quickLogin(username) {
+  var u = DB.users.find(function (x) { return x.username === username; });
+  if (!u) return;
+  login(u.username, u.role);
+  location.replace(APP_ROOT + ROLE_HOME[u.role]);
+}
+function doLogin(username, password, setError) {
+  var u = DB.users.find(function (x) { return x.username === username; });
+  if (!u) { setError('Username tidak ditemukan'); return; }
+  login(u.username, u.role);
+  location.replace(APP_ROOT + ROLE_HOME[u.role]);
+}
+document.addEventListener('alpine:init', function () {
+  Alpine.data('loginForm', function () {
+    return {
+      username: '', password: '', error: '',
+      submit: function () {
+        doLogin(this.username, this.password, (function (self) {
+          return function (msg) { self.error = msg; };
+        })(this));
+      }
+    };
+  });
+});
+</script>
+
+<footer class="mt-10 text-xs text-muted dark:text-muted-dark">
+  v1.0.0 · Mockup statis tanpa server. Indikator pemerataan &amp; skenario S4
+  adalah usulan yang perlu validasi dosen.
+</footer>
+</div>
+<script>
+  // isi chip user dari session
+  (function() {
+    var s = session();
+    var el = document.getElementById('nav-user');
+    if (s && el) el.textContent = s.username;
+  })();
+</script>
+</body>
+</html>

@@ -1,0 +1,432 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Simulasi Ticketing — Distribusi Beban Teknisi</title>
+
+{# Theme harus ditetapkan sebelum paint untuk menghindari flash (FOUC) #}
+<script>
+  (function () {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        },
+        colors: {
+          /* Chrome tokens — selaras dengan palette dataviz yang sudah divalidasi.
+             Slot series chart TIDAK diganti; tetap dari charts.py. */
+          canvas:  { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+          panel:   { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+          panel2:  { DEFAULT: '#ffffff', dark: '#232321' },
+          ink:     { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+          ink2:    { DEFAULT: '#52514e', dark: '#c3c2b7' },
+          muted:   { DEFAULT: '#898781', dark: '#898781' },
+          line:    { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+          accent:  { DEFAULT: '#2a78d6', dark: '#3987e5' },
+          good:    { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+          danger:  { DEFAULT: '#d03b3b', dark: '#e66767' },
+        },
+      },
+    },
+  };
+</script>
+
+{# CSS chart (dari charts.py) + scope table — disuntikkan via Jinja #}
+<style>
+  {{ viz_css|safe }}
+  [x-cloak] { display: none !important; }
+  .tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+  .tbl th { padding: 0.375rem 0.5rem; text-align: left; font-weight: 600; white-space: nowrap;
+            color: var(--tw-prose, #52514e); border-bottom: 1px solid; border-color: #e1e0d9; }
+  html.dark .tbl th { color: #c3c2b7; border-color: #2c2c2a; }
+  .tbl td { padding: 0.375rem 0.5rem; border-bottom: 1px solid; border-color: #e1e0d9; }
+  html.dark .tbl td { border-color: #2c2c2a; }
+  .tbl tbody tr:hover td { background: #ffffff; }
+  html.dark .tbl tbody tr:hover td { background: #232321; }
+  .tbl td.num, .tbl th.num { text-align: right; }
+</style>
+
+{# Plugin collapse dimuat SEBELUM core — tanpa ini x-collapse diabaikan #}
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased p-4 sm:p-6 lg:p-8">
+<div class="max-w-6xl mx-auto">
+
+  {# ======================= HEADER ======================= #}
+  <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div>
+      <h1 class="text-2xl font-bold tracking-tight">Simulasi Distribusi Beban Ticketing</h1>
+      <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">
+        Replikasi dari <code class="px-1 py-0.5 rounded bg-panel2 dark:bg-panel2-dark border border-line dark:border-line-dark text-[0.8em]">Simulasi_Workload_Ticketing_revisi.xlsx</code>
+        — 4 skenario aturan distribusi, indikator pemerataan beban teknisi.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <span class="inline-flex items-center px-3 py-1 rounded-full border border-line dark:border-line-dark text-xs text-ink2 dark:text-ink2-dark">
+        v{{ version }} · {{ sim.tickets|length }} tiket · {{ sim.technicians|length }} teknisi
+      </span>
+      <button type="button"
+              x-data="{ dark: document.documentElement.classList.contains('dark') }"
+              @click="dark = !dark; document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light')"
+              class="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-line dark:border-line-dark bg-panel dark:bg-panel-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors"
+              :aria-pressed="dark.toString()" aria-label="Ganti tema terang/gelap" title="Ganti tema">
+        <svg x-show="!dark" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5L19 19m0-14-1.5 1.5M6.5 17.5 5 19"/></svg>
+        <svg x-show="dark" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  {# ======================= FLASH ======================= #}
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="space-y-2 mb-6">
+        {% for cat, msg in messages %}
+          {% if cat == 'success' %}
+            <div class="flex gap-2 items-start px-4 py-2.5 rounded-lg border border-good/30 bg-good/10 text-good dark:text-good-dark text-sm">{{ msg }}</div>
+          {% elif cat == 'error' %}
+            <div class="flex gap-2 items-start px-4 py-2.5 rounded-lg border border-danger/30 bg-danger/10 text-danger dark:text-danger-dark text-sm">{{ msg }}</div>
+          {% else %}
+            <div class="px-4 py-2.5 rounded-lg border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark text-ink2 dark:text-ink2-dark text-sm">{{ msg }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  {# ======================= STAT TILES ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Ringkasan Dataset</h2>
+  {% set first = result.indicators['S1'] %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Total tiket</div>
+      <div class="mt-1 text-2xl font-semibold tabular-nums">{{ first.total_tickets }}</div>
+      <div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">termasuk tiket bantuan teknisi (TK-)</div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Jumlah kasus unik</div>
+      <div class="mt-1 text-2xl font-semibold tabular-nums">{{ first.unique_cases }}</div>
+      <div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">tiket tanpa Related Ticket ID</div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Total durasi layanan</div>
+      <div class="mt-1 text-2xl font-semibold tabular-nums">{{ first.total_duration }} <span class="text-sm font-normal text-muted dark:text-muted-dark">menit</span></div>
+      <div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">≈ {{ "%d:%02d"|format(first.total_duration//60, first.total_duration%60) }} jam</div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Beban ideal per teknisi</div>
+      <div class="mt-1 text-2xl font-semibold tabular-nums">{{ "%.2f"|format(first.ideal_load) }} <span class="text-sm font-normal text-muted dark:text-muted-dark">menit</span></div>
+      <div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">total durasi ÷ {{ sim.technicians|length }} teknisi</div>
+    </div>
+  </div>
+
+  {# ======================= TAB SKENARIO ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Pilih Skenario</h2>
+  <div class="flex flex-wrap gap-2">
+    <a href="{{ url_for('index') }}"
+       class="px-3.5 py-1.5 rounded-lg text-sm border transition-colors
+              {{ 'bg-accent dark:bg-accent-dark text-white border-accent dark:border-accent-dark'
+                 if not active_scenario
+                 else 'border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark' }}">
+      Semua (perbandingan)
+    </a>
+    {% for key, meta in scenarios.items() %}
+      <a href="{{ url_for('run_one', key=key) }}"
+         class="px-3.5 py-1.5 rounded-lg text-sm border transition-colors
+                {{ 'bg-accent dark:bg-accent-dark text-white border-accent dark:border-accent-dark'
+                   if active_scenario == key
+                   else 'border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark' }}">
+        {{ meta.name }}
+      </a>
+    {% endfor %}
+  </div>
+
+  {# ======================= DETAIL SKENARIO ======================= #}
+  {% if detail %}
+    <div class="mt-8">
+      <h2 class="text-base font-semibold">{{ detail.name }} — {{ detail.rule }}</h2>
+      <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">{{ detail.purpose }}</p>
+      <div x-data="{ open: true }" class="mt-3 rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark">
+        <button type="button" @click="open = !open"
+                class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium">
+          <span>Detail Assignment per Tiket ({{ detail.assignments|length }} baris)</span>
+          <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div x-show="open" x-cloak x-collapse class="border-t border-line dark:border-line-dark overflow-x-auto">
+          <table class="tbl">
+            <thead><tr>
+              <th>Ticket</th><th>Type</th><th>Masuk</th><th>Kategori</th><th>Detail</th>
+              <th>Prioritas</th><th class="num">Durasi</th><th>Teknisi</th><th>Status</th>
+              <th>Mulai</th><th>Selesai</th><th class="num">Tunggu</th><th>Aturan Penugasan</th>
+            </tr></thead>
+            <tbody>
+            {% for a in detail.assignments %}
+              <tr>
+                <td class="font-mono font-semibold">{{ a.ticket.id }}</td>
+                <td>{{ "T-" if a.ticket.ticket_type.value == "User Report" else "TK-" }}</td>
+                <td class="font-mono">{{ a.arrival.strftime("%H:%M") }}</td>
+                <td>{{ a.ticket.category }}</td>
+                <td>{{ a.ticket.detail }}</td>
+                <td>
+                  {% if a.ticket.priority.value == "High" %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">High</span>
+                  {% elif a.ticket.priority.value == "Medium" %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent dark:text-accent-dark">Medium</span>
+                  {% else %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Low</span>{% endif %}
+                </td>
+                <td class="num">{{ a.ticket.duration }}</td>
+                <td class="font-mono">{{ a.tech_id }}</td>
+                <td>{{ a.status.value }}</td>
+                <td class="font-mono">{{ a.start.strftime("%H:%M") }}</td>
+                <td class="font-mono">{{ a.finish.strftime("%H:%M") }}</td>
+                <td class="num">{{ a.waiting }}</td>
+                <td class="text-xs text-muted dark:text-muted-dark">{{ a.rule_note }}</td>
+              </tr>
+            {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  {% endif %}
+
+  {# ======================= TABEL INDIKATOR ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Indikator Pemerataan Beban</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+    <div class="overflow-x-auto">
+    <table class="tbl">
+      <thead><tr>
+        <th>Skenario</th><th>Aturan</th>
+        <th class="num">Max</th><th class="num">Min</th><th class="num">Gap</th>
+        <th class="num">Min/Max</th><th class="num">Std Dev</th><th class="num">Jain's</th>
+        <th class="num">Gap Berbobot</th><th class="num">Jain's Berbobot</th>
+        <th class="num">Tunggu avg</th><th class="num">Tunggu max</th><th>Selesai Terakhir</th>
+      </tr></thead>
+      <tbody>
+      {% for key, ind in result.indicators.items() %}
+        <tr>
+          <td class="font-semibold">{{ ind.name }}</td>
+          <td class="text-xs text-muted dark:text-muted-dark">{{ ind.rule }}</td>
+          <td class="num">{{ "%d:%02d"|format(ind.max_minutes//60, ind.max_minutes%60) }}</td>
+          <td class="num">{{ "%d:%02d"|format(ind.min_minutes//60, ind.min_minutes%60) }}</td>
+          <td class="num font-semibold">{{ ind.gap_minutes }}</td>
+          <td class="num">{{ "%.4f"|format(ind.balance_index) }}</td>
+          <td class="num">{{ "%.2f"|format(ind.stdev_minutes) }}</td>
+          <td class="num">{{ "%.4f"|format(ind.jains_index) }}</td>
+          <td class="num">{{ ind.gap_weighted }}</td>
+          <td class="num">{{ "%.4f"|format(ind.jains_index_weighted) }}</td>
+          <td class="num">{{ "%.2f"|format(ind.avg_waiting) }}</td>
+          <td class="num">{{ ind.max_waiting }}</td>
+          <td class="font-mono">{{ ind.last_finish.strftime("%H:%M") if ind.last_finish else "—" }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    <p class="mt-3 text-xs text-muted dark:text-muted-dark">
+      Jain's Fairness Index = (Σx)² / (n·Σx²); 1 = sangat merata, 1/n = sangat timpang.
+      Semua indikator pemerataan adalah <strong class="text-ink2 dark:text-ink2-dark">usulan</strong> dan belum final sebelum
+      disetujui dosen.
+    </p>
+  </div>
+
+  {# ======================= GRAFIK ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Grafik Beban per Teknisi</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 viz-root">
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      {{ workload_chart(result, sim.technicians, weighted=False)|safe }}
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      {{ workload_chart(result, sim.technicians, weighted=True)|safe }}
+    </div>
+  </div>
+
+  {# ======================= KESIMPULAN ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Kesimpulan</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 space-y-2 text-sm">
+    {% if result.best_by_gap_minutes %}
+    <p>Skenario dengan <strong>Gap menit</strong> terkecil:
+       <strong>{{ result.indicators[result.best_by_gap_minutes].name }}</strong>
+       ({{ result.indicators[result.best_by_gap_minutes].gap_minutes }} menit).</p>
+    {% endif %}
+    {% if result.best_by_gap_weighted %}
+    <p>Skenario dengan <strong>Gap berbobot</strong> terkecil:
+       <strong>{{ result.indicators[result.best_by_gap_weighted].name }}</strong>
+       ({{ result.indicators[result.best_by_gap_weighted].gap_weighted }} pt-min).</p>
+    {% endif %}
+    {% set s1 = result.indicators['S1'] %}
+    {% set s2 = result.indicators['S2'] %}
+    {% set s3 = result.indicators['S3'] %}
+    {% if s1.gap_minutes %}
+    <p>Penurunan Gap menit <strong>S2 vs S1</strong>:
+       {{ "%.1f"|format((1 - s2.gap_minutes / s1.gap_minutes) * 100) }}%.</p>
+    {% endif %}
+    {% if s1.gap_weighted %}
+    <p>Penurunan Gap berbobot <strong>S3 vs S1</strong>:
+       {{ "%.1f"|format((1 - s3.gap_weighted / s1.gap_weighted) * 100) }}%.</p>
+    {% endif %}
+  </div>
+
+  {# ======================= FORM TAMBAH TIKET ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Tambah Tiket</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+    <form method="post" action="{{ url_for('add_ticket_route') }}"
+          x-data="{ type: 'User Report' }" class="space-y-4">
+      <div class="flex flex-wrap gap-x-4 gap-y-3 items-end">
+        <div class="min-w-[150px]">
+          <label for="ticket_type" class="block text-xs text-muted dark:text-muted-dark mb-1">Jenis Tiket</label>
+          <select id="ticket_type" name="ticket_type" x-model="type"
+                  class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+            {% for t in ticket_types %}<option>{{ t }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="min-w-[180px]">
+          <label for="timestamp" class="block text-xs text-muted dark:text-muted-dark mb-1">Waktu Masuk</label>
+          <input id="timestamp" name="timestamp" type="datetime-local" value="2026-09-23T13:00" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+        </div>
+        <div class="min-w-[150px]">
+          <label for="category" class="block text-xs text-muted dark:text-muted-dark mb-1">Kategori</label>
+          <select id="category" name="category"
+                  class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+            {% for c in categories %}<option>{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="min-w-[130px]">
+          <label for="priority" class="block text-xs text-muted dark:text-muted-dark mb-1">Prioritas</label>
+          <select id="priority" name="priority"
+                  class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+            {% for p in priorities %}<option>{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div class="min-w-[110px]">
+          <label for="duration" class="block text-xs text-muted dark:text-muted-dark mb-1">Durasi (menit)</label>
+          <input id="duration" name="duration" type="number" min="1" value="30" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-x-4 gap-y-3 items-end">
+        <div class="flex-[2] min-w-[220px]">
+          <label for="detail" class="block text-xs text-muted dark:text-muted-dark mb-1">Detail Kasus</label>
+          <input id="detail" name="detail" type="text" placeholder="mis. WiFi mati total di gedung C" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+        </div>
+        <div class="min-w-[140px]" x-show="type === 'Technician Request'" x-cloak>
+          <label for="related_id" class="block text-xs text-muted dark:text-muted-dark mb-1">Related Ticket ID <span class="text-danger dark:text-danger-dark">wajib</span></label>
+          <input id="related_id" name="related_id" type="text" placeholder="T-006"
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+        </div>
+        <div class="min-w-[150px]" x-show="type === 'Technician Request'" x-cloak>
+          <label for="requested_by" class="block text-xs text-muted dark:text-muted-dark mb-1">Requested By (Teknisi) <span class="text-danger dark:text-danger-dark">wajib</span></label>
+          <select id="requested_by" name="requested_by"
+                  class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40">
+            <option value=""></option>
+            {% for t in sim.technicians %}<option>{{ t.id }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <button type="submit"
+                  class="rounded-md bg-accent dark:bg-accent-dark hover:brightness-110 text-white px-4 py-2 text-sm font-medium transition">
+            Tambah Tiket
+          </button>
+        </div>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <p class="text-xs text-muted dark:text-muted-dark">
+          ID tiket digenerate otomatis sistem (counter terpisah T-/TK-) untuk
+          mencegah bentrok saat input bersamaan.
+        </p>
+        <span x-show="type === 'Technician Request'" x-cloak
+              class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">
+          TK- wajib mengisi Related Ticket ID &amp; Requested By — validasi server tetap jalan
+        </span>
+        <span x-show="type === 'User Report'" x-cloak
+              class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">
+          T- : laporan pengguna, terhitung sebagai kasus baru
+        </span>
+      </div>
+    </form>
+    <div class="mt-3 pt-3 border-t border-line dark:border-line-dark">
+      <form method="post" action="{{ url_for('reset_data') }}">
+        <button type="submit"
+                class="rounded-md border border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark px-4 py-2 text-sm font-medium transition">
+          Muat ulang dataset dari file
+        </button>
+      </form>
+    </div>
+  </div>
+
+  {# ======================= DAFTAR TIKET ======================= #}
+  <div x-data="{ open: false }" class="mt-8">
+    <h2 class="text-base font-semibold mb-3">Daftar Tiket ({{ sim.tickets|length }})</h2>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark">
+      <button type="button" @click="open = !open"
+              class="w-full flex items-center justify-between px-4 py-3 text-sm font-medium">
+        <span>Klik untuk {% if sim.tickets|length > 15 %}lihat/sembunyikan{% else %}lihat{% endif %} tabel tiket</span>
+        <svg class="w-4 h-4 transition-transform" :class="open ? 'rotate-180' : ''" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" d="m6 9 6 6 6-6"/></svg>
+      </button>
+      <div x-show="open" x-cloak x-collapse class="border-t border-line dark:border-line-dark overflow-x-auto">
+        <table class="tbl">
+          <thead><tr>
+            <th>ID</th><th>Jenis</th><th>Dibuat Oleh</th><th>Waktu</th><th>Kategori</th>
+            <th>Detail</th><th>Prioritas</th><th class="num">Bobot</th><th class="num">Durasi</th>
+            <th>Related</th><th>Request By</th>
+          </tr></thead>
+          <tbody>
+          {% for t in sim.tickets | sort(attribute='timestamp') %}
+            <tr>
+              <td class="font-mono font-semibold">{{ t.id }}</td>
+              <td>{{ t.ticket_type.value }}</td>
+              <td>{{ t.created_by }}</td>
+              <td class="font-mono">{{ t.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+              <td>{{ t.category }}</td>
+              <td>{{ t.detail }}</td>
+              <td>
+                {% if t.priority.value == "High" %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">High</span>
+                {% elif t.priority.value == "Medium" %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent dark:text-accent-dark">Medium</span>
+                {% else %}<span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Low</span>{% endif %}
+              </td>
+              <td class="num">{{ t.weight }}</td>
+              <td class="num">{{ t.duration }}</td>
+              <td class="font-mono">{{ t.related_id or "—" }}</td>
+              <td class="font-mono">{{ t.requested_by or "—" }}</td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  {# ======================= DAFTAR TEKNISI ======================= #}
+  <h2 class="text-base font-semibold mt-8 mb-3">Daftar Teknisi</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+    <table class="tbl">
+      <thead><tr><th>ID</th><th>Nama</th><th>Status Awal</th></tr></thead>
+      <tbody>
+      {% for t in sim.technicians %}
+        <tr><td class="font-mono font-semibold">{{ t.id }}</td><td>{{ t.name }}</td><td>{{ t.initial_status.value }}</td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <footer class="mt-10 text-xs text-muted dark:text-muted-dark">
+    Catatan: indikator pemerataan dan skenario S4 adalah usulan yang perlu
+    validasi dosen. Bobot prioritas Low=1 / Medium=2 / High=3 masih asumsi.
+  </footer>
+</div>
+</body>
+</html>

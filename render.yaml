@@ -1,0 +1,26 @@
+# Render Blueprint — deploy satu klik untuk aplikasi Flask.
+# Render membaca file ini dan membuat web service secara otomatis.
+# Daftar dulu di https://render.com, lalu pilih "New > Blueprint" dan
+# arahkan ke repo GitHub ini.
+#
+# Catatan: free tier web service akan "sleep" setelah 15 menit tidak ada
+# request dan butuh ~30-50 detik untuk bangun kembali. Untuk demo dosen
+# yang andal, pertimbangkan starter tier ($7/bln).
+
+services:
+  - type: web
+    name: ticketing-sim
+    runtime: python
+    plan: free
+    # Python 3.12 (sesuai versi lokal). Render mendukung 3.7-3.13.
+    pythonVersion: "3.12"
+    buildCommand: pip install -r requirements.txt
+    # gunicorn standar untuk Python web service di Linux.
+    startCommand: gunicorn wsgi:app --workers 2 --threads 4 --timeout 60
+    healthCheckPath: /
+    autoDeploy: true
+    # Dataset 22 tiket dibaca dari repo (data/tickets.json) — tidak butuh
+    # env wajib. envPath default tidak perlu.
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12"

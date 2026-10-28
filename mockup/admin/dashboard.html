@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Monitoring Beban Kerja</title>
+<script>(function(){var t=localStorage.getItem('theme');if(t==='dark'||(!t&&window.matchMedia('(prefers-color-scheme: dark)').matches)){document.documentElement.classList.add('dark');}})();</script>
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>tailwind.config = tailwind.config = {
+    darkMode: 'class',
+    theme: { extend: {
+      fontFamily: { sans: ['system-ui','-apple-system','"Segoe UI"','sans-serif'],
+                    mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] },
+      colors: {
+        canvas: { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+        panel:  { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+        panel2: { DEFAULT: '#ffffff', dark: '#232321' },
+        ink:    { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+        ink2:   { DEFAULT: '#52514e', dark: '#c3c2b7' },
+        muted:  { DEFAULT: '#898781', dark: '#898781' },
+        line:   { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+        accent: { DEFAULT: '#2a78d6', dark: '#3987e5' },
+        good:   { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+        warn:   { DEFAULT: '#b26a00', dark: '#eda100' },
+        danger: { DEFAULT: '#d03b3b', dark: '#e66767' },
+      },
+    } },
+  };;</script>
+<style>
+
+/* Variabel chart — nilai hex adalah palette dataviz yang sudah divalidasi
+   (CVD-safe). Definisi dark mengikuti .dark pada <html> (toggle Alpine). */
+.viz-root {
+  color-scheme: light;
+  --viz-surface: #fcfcfb; --viz-primary: #0b0b0b; --viz-secondary: #52514e;
+  --viz-muted: #898781; --viz-gridline: #e1e0d9; --viz-baseline: #c3c2b7;
+  --viz-border: rgba(11,11,11,0.10);
+  --viz-series-1: #2a78d6; --viz-series-2: #eb6834;
+  --viz-series-3: #1baf7a; --viz-series-4: #eda100;
+}
+html.dark .viz-root {
+  color-scheme: dark;
+  --viz-surface: #1a1a19; --viz-primary: #ffffff; --viz-secondary: #c3c2b7;
+  --viz-muted: #898781; --viz-gridline: #2c2c2a; --viz-baseline: #383835;
+  --viz-border: rgba(255,255,255,0.10);
+  --viz-series-1: #3987e5; --viz-series-2: #d95926;
+  --viz-series-3: #199e70; --viz-series-4: #c98500;
+}
+.viz-chart { width: 100%; height: auto; display: block; border: 1px solid var(--viz-border); border-radius: 8px; }
+.viz-title { font: 600 14px/1.2 system-ui, -apple-system, "Segoe UI", sans-serif; }
+.viz-axis { font: 11px/1 system-ui, sans-serif; }
+.viz-cat { font: 600 12px/1.2 system-ui, sans-serif; }
+.viz-total { font: 10px/1 system-ui, sans-serif; }
+.viz-value { font: 10px/1 system-ui, sans-serif; }
+.viz-legend-text { font: 12px/1.2 system-ui, sans-serif; }
+.viz-mark { cursor: pointer; }
+.viz-mark:hover rect, .viz-mark:focus-visible rect { stroke: var(--viz-primary); stroke-width: 1.5; }
+
+
+[x-cloak] { display: none !important; }
+.tbl { width:100%; border-collapse:collapse; font-variant-numeric:tabular-nums; font-size:.8125rem; }
+.tbl th { padding:.375rem .5rem; text-align:left; font-weight:600; white-space:nowrap;
+          color:#52514e; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl th { color:#c3c2b7; border-color:#2c2c2a; }
+.tbl td { padding:.375rem .5rem; border-bottom:1px solid #e1e0d9; }
+html.dark .tbl td { border-color:#2c2c2a; }
+.tbl td.num, .tbl th.num { text-align:right; }
+.tbl tbody tr:hover td { background:#ffffff; }
+html.dark .tbl tbody tr:hover td { background:#232321; }
+
+</style>
+
+<script>const APP_ROOT = "../";</script>
+<script src="../_auth.js"></script>
+<script src="../_data.js"></script>
+<script>requireRole('admin');</script>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased p-4 sm:p-6 lg:p-8">
+<div class="max-w-6xl mx-auto">
+<header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
+  <div class="flex items-center gap-3">
+    <h1 class="text-xl font-bold tracking-tight">Dashboard Monitoring Beban Kerja</h1>
+    <span class="inline-block px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wide
+                 bg-accent/15 text-accent dark:text-accent-dark border border-accent/30">MOCKUP</span>
+  </div>
+  <div class="flex items-center gap-3">
+    <span class="inline-flex items-center px-3 py-1 rounded-full border border-line dark:border-line-dark text-xs text-ink2 dark:text-ink2-dark">
+      <span id="nav-user">Admin Helpdesk</span> · <strong>admin</strong>
+    </span>
+    <button type="button" onclick="logout()"
+            class="px-3 py-1.5 rounded-lg text-sm border border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors"
+            >
+      Logout
+    </button>
+    <button type="button"
+            x-data="{ dark: document.documentElement.classList.contains('dark') }"
+            @click="dark = !dark; document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light')"
+            :aria-pressed="dark.toString()" aria-label="Ganti tema terang/gelap" title="Ganti tema"
+            class="inline-flex items-center justify-center w-10 h-10 rounded-lg border border-line dark:border-line-dark bg-panel dark:bg-panel-dark hover:bg-panel2 dark:hover:bg-panel2-dark transition-colors">
+      <svg x-show="!dark" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path stroke-linecap="round" d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5 19 19m0-14-1.5 1.5M6.5 17.5 5 19"/></svg>
+      <svg x-show="dark" x-cloak class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24"><path stroke-linecap="round" d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+    </button>
+  </div>
+</header>
+<nav class="flex flex-wrap gap-2 mb-4">
+  <a href="../admin/dashboard.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors bg-accent dark:bg-accent-dark text-white border-accent dark:border-accent-dark">Monitoring Beban</a><a href="../admin/simulasi.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Simulasi Skenario</a><a href="../admin/tiket.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Semua Tiket</a><a href="../admin/tiket-baru.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Buat Tiket TK-</a><a href="../admin/teknisi.html" class="px-3 py-1.5 rounded-lg text-sm border transition-colors border-line dark:border-line-dark text-ink2 dark:text-ink2-dark hover:bg-panel2 dark:hover:bg-panel2-dark">Manajemen Teknisi</a>
+</nav>
+<p class="text-xs text-muted dark:text-muted-dark mb-6">
+  Data asli dari mesin simulasi (identik dengan Excel, 42/42 cek). Status alur
+  kerja tiket (Open → In Progress → Resolved) adalah <strong>usulan</strong> —
+  belum ada di mesin Excel.
+</p>
+
+<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Beban ideal per teknisi</div><div class="mt-1 text-2xl font-semibold tabular-nums">191.25 menit</div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">total durasi 765 ÷ 4 teknisi</div></div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Total tiket hari ini</div><div class="mt-1 text-2xl font-semibold tabular-nums">22</div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">20 kasus unik (TK- tidak dihitung)</div></div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Gap terkecil</div><div class="mt-1 text-2xl font-semibold tabular-nums">25 menit</div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">S2 Cumulative — paling merata</div></div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Teknisi tersedia</div><div class="mt-1 text-2xl font-semibold tabular-nums">4/4</div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">status awal shift 08:00</div></div>
+</div>
+
+<h2 class="text-base font-semibold mt-8 mb-3">Status Tiket</h2>
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Open</div><div class="mt-1 text-2xl font-semibold tabular-nums"><span data-count-status="Open" data-count-tickets="T-001,T-002,T-003,T-004,T-005,T-006,T-007,T-008,T-009,T-010,T-011,T-012,T-013,T-014,T-015,T-016,T-017,T-018,T-019,T-020,TK-001,TK-002">22</span></div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">menunggu dikerjakan</div></div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">In Progress</div><div class="mt-1 text-2xl font-semibold tabular-nums"><span data-count-status="In Progress" data-count-tickets="T-001,T-002,T-003,T-004,T-005,T-006,T-007,T-008,T-009,T-010,T-011,T-012,T-013,T-014,T-015,T-016,T-017,T-018,T-019,T-020,TK-001,TK-002">0</span></div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">sedang dikerjakan teknisi</div></div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4"><div class="text-xs text-muted dark:text-muted-dark">Resolved</div><div class="mt-1 text-2xl font-semibold tabular-nums"><span data-count-status="Resolved" data-count-tickets="T-001,T-002,T-003,T-004,T-005,T-006,T-007,T-008,T-009,T-010,T-011,T-012,T-013,T-014,T-015,T-016,T-017,T-018,T-019,T-020,TK-001,TK-002">0</span></div><div class="mt-0.5 text-[11px] text-muted dark:text-muted-dark">selesai</div></div>
+</div>
+
+<h2 class="text-base font-semibold mt-8 mb-3">Beban Kerja per Teknisi</h2>
+<div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 viz-root">
+  <svg viewBox="0 0 576 300" class="viz-chart" role="img" aria-label="Beban Durasi per Teknisi (menit)" xmlns="http://www.w3.org/2000/svg"><rect x="0" y="0" width="576" height="300" fill="var(--viz-surface,#fcfcfb)"/><text x="56" y="22" class="viz-title" fill="var(--viz-primary,#0b0b0b)">Beban Durasi per Teknisi (menit)</text><line x1="56" y1="242.0" x2="552" y2="242.0" stroke="var(--viz-gridline,#e1e0d9)" stroke-width="1"/><text x="48" y="246.0" text-anchor="end" class="viz-axis" fill="var(--viz-muted,#898781)">0.0</text><line x1="56" y1="193.0" x2="552" y2="193.0" stroke="var(--viz-gridline,#e1e0d9)" stroke-width="1"/><text x="48" y="197.0" text-anchor="end" class="viz-axis" fill="var(--viz-muted,#898781)">70</text><line x1="56" y1="144.0" x2="552" y2="144.0" stroke="var(--viz-gridline,#e1e0d9)" stroke-width="1"/><text x="48" y="148.0" text-anchor="end" class="viz-axis" fill="var(--viz-muted,#898781)">141</text><line x1="56" y1="95.0" x2="552" y2="95.0" stroke="var(--viz-gridline,#e1e0d9)" stroke-width="1"/><text x="48" y="99.0" text-anchor="end" class="viz-axis" fill="var(--viz-muted,#898781)">211</text><line x1="56" y1="46.0" x2="552" y2="46.0" stroke="var(--viz-gridline,#e1e0d9)" stroke-width="1"/><text x="48" y="50.0" text-anchor="end" class="viz-axis" fill="var(--viz-muted,#898781)">282</text><text x="16" y="36" class="viz-axis" fill="var(--viz-muted,#898781)">menit</text><text x="118.0" y="262" text-anchor="middle" class="viz-cat" fill="var(--viz-secondary,#52514e)">S1 Baseline</text><text x="118.0" y="280" text-anchor="middle" class="viz-total" fill="var(--viz-muted,#898781)">Σ 0</text><g class="viz-mark" tabindex="0" role="img" aria-label="S1 Baseline · T01 Teknisi A: 245 menit (24500% dari group)"><title>S1 Baseline · T01 Teknisi A: 245 menit (24500% dari group)</title><rect x="63.0" y="71.6" width="26" height="170.4" rx="4" ry="4" fill="var(--viz-series-1,#2a78d6)"><animate attributeName="height" from="0" to="170.4" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="71.6" dur="0.4s" fill="freeze"/></rect><text x="76.0" y="66.6" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">245</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S1 Baseline · T02 Teknisi B: 245 menit (24500% dari group)"><title>S1 Baseline · T02 Teknisi B: 245 menit (24500% dari group)</title><rect x="91.0" y="71.6" width="26" height="170.4" rx="4" ry="4" fill="var(--viz-series-2,#eb6834)"><animate attributeName="height" from="0" to="170.4" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="71.6" dur="0.4s" fill="freeze"/></rect><text x="104.0" y="66.6" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">245</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S1 Baseline · T03 Teknisi C: 125 menit (12500% dari group)"><title>S1 Baseline · T03 Teknisi C: 125 menit (12500% dari group)</title><rect x="119.0" y="155.0" width="26" height="87.0" rx="4" ry="4" fill="var(--viz-series-3,#1baf7a)"><animate attributeName="height" from="0" to="87.0" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="155.0" dur="0.4s" fill="freeze"/></rect><text x="132.0" y="150.0" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">125</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S1 Baseline · T04 Teknisi D: 150 menit (15000% dari group)"><title>S1 Baseline · T04 Teknisi D: 150 menit (15000% dari group)</title><rect x="147.0" y="137.7" width="26" height="104.3" rx="4" ry="4" fill="var(--viz-series-4,#eda100)"><animate attributeName="height" from="0" to="104.3" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="137.7" dur="0.4s" fill="freeze"/></rect><text x="160.0" y="132.7" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">150</text></g><text x="242.0" y="262" text-anchor="middle" class="viz-cat" fill="var(--viz-secondary,#52514e)">S2 Cumulative</text><text x="242.0" y="280" text-anchor="middle" class="viz-total" fill="var(--viz-muted,#898781)">Σ 0</text><g class="viz-mark" tabindex="0" role="img" aria-label="S2 Cumulative · T01 Teknisi A: 185 menit (18500% dari group)"><title>S2 Cumulative · T01 Teknisi A: 185 menit (18500% dari group)</title><rect x="187.0" y="113.3" width="26" height="128.7" rx="4" ry="4" fill="var(--viz-series-1,#2a78d6)"><animate attributeName="height" from="0" to="128.7" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="113.3" dur="0.4s" fill="freeze"/></rect><text x="200.0" y="108.3" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">185</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S2 Cumulative · T02 Teknisi B: 180 menit (18000% dari group)"><title>S2 Cumulative · T02 Teknisi B: 180 menit (18000% dari group)</title><rect x="215.0" y="116.8" width="26" height="125.2" rx="4" ry="4" fill="var(--viz-series-2,#eb6834)"><animate attributeName="height" from="0" to="125.2" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="116.8" dur="0.4s" fill="freeze"/></rect><text x="228.0" y="111.8" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">180</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S2 Cumulative · T03 Teknisi C: 195 menit (19500% dari group)"><title>S2 Cumulative · T03 Teknisi C: 195 menit (19500% dari group)</title><rect x="243.0" y="106.3" width="26" height="135.7" rx="4" ry="4" fill="var(--viz-series-3,#1baf7a)"><animate attributeName="height" from="0" to="135.7" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="106.3" dur="0.4s" fill="freeze"/></rect><text x="256.0" y="101.3" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">195</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S2 Cumulative · T04 Teknisi D: 205 menit (20500% dari group)"><title>S2 Cumulative · T04 Teknisi D: 205 menit (20500% dari group)</title><rect x="271.0" y="99.4" width="26" height="142.6" rx="4" ry="4" fill="var(--viz-series-4,#eda100)"><animate attributeName="height" from="0" to="142.6" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="99.4" dur="0.4s" fill="freeze"/></rect><text x="284.0" y="94.4" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">205</text></g><text x="366.0" y="262" text-anchor="middle" class="viz-cat" fill="var(--viz-secondary,#52514e)">S3 Priority-aware</text><text x="366.0" y="280" text-anchor="middle" class="viz-total" fill="var(--viz-muted,#898781)">Σ 0</text><g class="viz-mark" tabindex="0" role="img" aria-label="S3 Priority-aware · T01 Teknisi A: 180 menit (18000% dari group)"><title>S3 Priority-aware · T01 Teknisi A: 180 menit (18000% dari group)</title><rect x="311.0" y="116.8" width="26" height="125.2" rx="4" ry="4" fill="var(--viz-series-1,#2a78d6)"><animate attributeName="height" from="0" to="125.2" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="116.8" dur="0.4s" fill="freeze"/></rect><text x="324.0" y="111.8" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">180</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S3 Priority-aware · T02 Teknisi B: 185 menit (18500% dari group)"><title>S3 Priority-aware · T02 Teknisi B: 185 menit (18500% dari group)</title><rect x="339.0" y="113.3" width="26" height="128.7" rx="4" ry="4" fill="var(--viz-series-2,#eb6834)"><animate attributeName="height" from="0" to="128.7" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="113.3" dur="0.4s" fill="freeze"/></rect><text x="352.0" y="108.3" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">185</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S3 Priority-aware · T03 Teknisi C: 175 menit (17500% dari group)"><title>S3 Priority-aware · T03 Teknisi C: 175 menit (17500% dari group)</title><rect x="367.0" y="120.3" width="26" height="121.7" rx="4" ry="4" fill="var(--viz-series-3,#1baf7a)"><animate attributeName="height" from="0" to="121.7" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="120.3" dur="0.4s" fill="freeze"/></rect><text x="380.0" y="115.3" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">175</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S3 Priority-aware · T04 Teknisi D: 225 menit (22500% dari group)"><title>S3 Priority-aware · T04 Teknisi D: 225 menit (22500% dari group)</title><rect x="395.0" y="85.5" width="26" height="156.5" rx="4" ry="4" fill="var(--viz-series-4,#eda100)"><animate attributeName="height" from="0" to="156.5" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="85.5" dur="0.4s" fill="freeze"/></rect><text x="408.0" y="80.5" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">225</text></g><text x="490.0" y="262" text-anchor="middle" class="viz-cat" fill="var(--viz-secondary,#52514e)">S4 Redistribution</text><text x="490.0" y="280" text-anchor="middle" class="viz-total" fill="var(--viz-muted,#898781)">Σ 0</text><g class="viz-mark" tabindex="0" role="img" aria-label="S4 Redistribution · T01 Teknisi A: 210 menit (21000% dari group)"><title>S4 Redistribution · T01 Teknisi A: 210 menit (21000% dari group)</title><rect x="435.0" y="95.9" width="26" height="146.1" rx="4" ry="4" fill="var(--viz-series-1,#2a78d6)"><animate attributeName="height" from="0" to="146.1" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="95.9" dur="0.4s" fill="freeze"/></rect><text x="448.0" y="90.9" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">210</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S4 Redistribution · T02 Teknisi B: 180 menit (18000% dari group)"><title>S4 Redistribution · T02 Teknisi B: 180 menit (18000% dari group)</title><rect x="463.0" y="116.8" width="26" height="125.2" rx="4" ry="4" fill="var(--viz-series-2,#eb6834)"><animate attributeName="height" from="0" to="125.2" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="116.8" dur="0.4s" fill="freeze"/></rect><text x="476.0" y="111.8" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">180</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S4 Redistribution · T03 Teknisi C: 195 menit (19500% dari group)"><title>S4 Redistribution · T03 Teknisi C: 195 menit (19500% dari group)</title><rect x="491.0" y="106.3" width="26" height="135.7" rx="4" ry="4" fill="var(--viz-series-3,#1baf7a)"><animate attributeName="height" from="0" to="135.7" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="106.3" dur="0.4s" fill="freeze"/></rect><text x="504.0" y="101.3" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">195</text></g><g class="viz-mark" tabindex="0" role="img" aria-label="S4 Redistribution · T04 Teknisi D: 180 menit (18000% dari group)"><title>S4 Redistribution · T04 Teknisi D: 180 menit (18000% dari group)</title><rect x="519.0" y="116.8" width="26" height="125.2" rx="4" ry="4" fill="var(--viz-series-4,#eda100)"><animate attributeName="height" from="0" to="125.2" dur="0.4s" fill="freeze"/><animate attributeName="y" from="242" to="116.8" dur="0.4s" fill="freeze"/></rect><text x="532.0" y="111.8" text-anchor="middle" class="viz-value" fill="var(--viz-secondary,#52514e)">180</text></g><line x1="56" y1="242" x2="552" y2="242" stroke="var(--viz-baseline,#c3c2b7)" stroke-width="1.5"/><g class="viz-legend"><rect x="56" y="275" width="12" height="12" rx="3" fill="var(--viz-series-1,#2a78d6)"/><text x="73" y="285" class="viz-legend-text" fill="var(--viz-secondary,#52514e)">T01 Teknisi A</text></g><g class="viz-legend"><rect x="192.60000000000002" y="275" width="12" height="12" rx="3" fill="var(--viz-series-2,#eb6834)"/><text x="209.60000000000002" y="285" class="viz-legend-text" fill="var(--viz-secondary,#52514e)">T02 Teknisi B</text></g><g class="viz-legend"><rect x="329.20000000000005" y="275" width="12" height="12" rx="3" fill="var(--viz-series-3,#1baf7a)"/><text x="346.20000000000005" y="285" class="viz-legend-text" fill="var(--viz-secondary,#52514e)">T03 Teknisi C</text></g><g class="viz-legend"><rect x="465.80000000000007" y="275" width="12" height="12" rx="3" fill="var(--viz-series-4,#eda100)"/><text x="482.80000000000007" y="285" class="viz-legend-text" fill="var(--viz-secondary,#52514e)">T04 Teknisi D</text></g></svg>
+  <p class="mt-2 text-xs text-muted dark:text-muted-dark">
+    Beban <strong>S2 Cumulative</strong> dipakai sebagai kondisi monitor
+    karena Gap-nya paling kecil. Bar melebihi beban ideal ditandai merah di tabel.
+  </p>
+</div>
+
+<h2 class="text-base font-semibold mt-8 mb-3">Status Teknisi</h2>
+<div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+  <div class="overflow-x-auto">
+  <table class="tbl">
+    <thead><tr>
+      <th>ID</th><th>Nama</th><th>Status</th>
+      <th class="num">Beban (menit)</th><th class="num">Beban Berbobot</th>
+      <th class="num">Tiket</th><th class="num">Selisih vs Ideal</th>
+    </tr></thead>
+    <tbody><tr><td class="font-mono font-semibold">T01</td><td>Teknisi A</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Available</span></td><td class="num">185 menit</td><td class="num">520 pt-min</td><td class="num">4</td><td class="num ">-6</td></tr><tr><td colspan="7" class="!py-1.5 !border-b-0"><div class="h-2 rounded-full bg-line dark:bg-line-dark overflow-hidden"><div class="h-full rounded-full bg-accent dark:bg-accent-dark" style="width:90.2%"></div></div></td></tr><tr><td class="font-mono font-semibold">T02</td><td>Teknisi B</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Available</span></td><td class="num">180 menit</td><td class="num">345 pt-min</td><td class="num">6</td><td class="num ">-11</td></tr><tr><td colspan="7" class="!py-1.5 !border-b-0"><div class="h-2 rounded-full bg-line dark:bg-line-dark overflow-hidden"><div class="h-full rounded-full bg-accent dark:bg-accent-dark" style="width:87.8%"></div></div></td></tr><tr><td class="font-mono font-semibold">T03</td><td>Teknisi C</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Available</span></td><td class="num">195 menit</td><td class="num">535 pt-min</td><td class="num">5</td><td class="num font-semibold text-danger dark:text-danger-dark">+4</td></tr><tr><td colspan="7" class="!py-1.5 !border-b-0"><div class="h-2 rounded-full bg-line dark:bg-line-dark overflow-hidden"><div class="h-full rounded-full bg-danger dark:bg-danger-dark" style="width:95.1%"></div></div></td></tr><tr><td class="font-mono font-semibold">T04</td><td>Teknisi D</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Available</span></td><td class="num">205 menit</td><td class="num">400 pt-min</td><td class="num">7</td><td class="num font-semibold text-danger dark:text-danger-dark">+14</td></tr><tr><td colspan="7" class="!py-1.5 !border-b-0"><div class="h-2 rounded-full bg-line dark:bg-line-dark overflow-hidden"><div class="h-full rounded-full bg-danger dark:bg-danger-dark" style="width:100.0%"></div></div></td></tr></tbody>
+  </table>
+  </div>
+</div>
+
+<h2 class="text-base font-semibold mt-8 mb-3">Tiket Masuk Terbaru</h2>
+<div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+  <div class="overflow-x-auto">
+  <table class="tbl">
+    <thead><tr><th>ID</th><th>Waktu</th><th>Kategori</th><th>Detail</th><th>Prioritas</th><th class="num">Durasi</th></tr></thead>
+    <tbody><tr><td class="font-mono font-semibold">T-018</td><td class="font-mono">11:20</td><td>Academic System</td><td>Sistem akademik tidak bisa diakses dari luar kampus</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">High</span></td><td class="num">50</td></tr>
+<tr><td class="font-mono font-semibold">T-019</td><td class="font-mono">11:35</td><td>Software</td><td>Software lisensi expired</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent dark:text-accent-dark">Medium</span></td><td class="num">40</td></tr>
+<tr><td class="font-mono font-semibold">T-020</td><td class="font-mono">11:50</td><td>Network</td><td>Jaringan mati total di satu ruangan</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good dark:text-good-dark">Low</span></td><td class="num">20</td></tr>
+<tr><td class="font-mono font-semibold">TK-001</td><td class="font-mono">12:20</td><td>Network</td><td>T04 minta bantuan konfigurasi switch tambahan untuk kasus T-006 (WiFi gedung B)</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent dark:text-accent-dark">Medium</span></td><td class="num">20</td></tr>
+<tr><td class="font-mono font-semibold">TK-002</td><td class="font-mono">12:35</td><td>Network</td><td>T02 minta bantuan cek beban server untuk kasus T-015 (jaringan lambat)</td><td><span class="inline-block px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger dark:text-danger-dark">High</span></td><td class="num">30</td></tr></tbody>
+  </table>
+  </div>
+  <p class="mt-3"><a href="../admin/tiket.html" class="text-sm font-medium text-accent dark:text-accent-dark hover:underline">Lihat semua tiket →</a></p>
+</div>
+
+<footer class="mt-10 text-xs text-muted dark:text-muted-dark">
+  v1.0.0 · Mockup statis tanpa server. Indikator pemerataan &amp; skenario S4
+  adalah usulan yang perlu validasi dosen.
+</footer>
+</div>
+<script>
+  // isi chip user dari session
+  (function() {
+    var s = session();
+    var el = document.getElementById('nav-user');
+    if (s && el) el.textContent = s.username;
+  })();
+</script>
+</body>
+</html>

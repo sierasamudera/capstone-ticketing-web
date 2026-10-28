@@ -1,0 +1,29 @@
+# Konfigurasi deploy untuk seluruh folder mockup/ sebagai situs statis.
+# Mockup = HTML/JS/CSS murni (semua path relatif, tidak ada panggilan server),
+# jadi tidak ada build step sama sekali.
+#
+# Cara pakai (2 opsi, keduanya gratis):
+#
+# A. Drag & drop  (paling cepat, tanpa GitHub)
+#    1. Buka https://app.netlify.com/drop
+#    2. Drag folder `mockup/` ke kotak ungu
+#    3. Selesai. URL online langsung dapat (mis. https://ticketing-mockup.netlify.app)
+#
+# B. Hubungkan repo GitHub (otomatis re-deploy tiap push)
+#    1. Push proyek ke GitHub
+#    2. Netlify: Add new site > Import an existing project > pilih repo
+#    3. Build command: (kosong)  | Publish directory: mockup
+#    4. Deploy site
+
+[build]
+  publish = "mockup"
+  command = "echo 'Static mockup — tidak ada build step'"
+
+# Netlify melayani 404.html otomatis untuk path yang tidak ada, dan
+# index.html (pengalih ke login.html) untuk root — tidak perlu aturan
+# redirect tambahan. header ini memastikan file _auth.js/_data.js
+# selalu dikirim ulang saat berubah, bukan di-cache browser lama.
+[[headers]]
+  for = "/_*.js"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"
