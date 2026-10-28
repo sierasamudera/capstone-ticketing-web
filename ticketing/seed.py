@@ -6,6 +6,9 @@ pengguna -- menghindari bentrok saat input bersamaan.
 
 Catatan: Dataset kini disimpan di SQLite database (data/ticketing.db) agar
 perubahan (tambah tiket/teknisi) persisten tanpa perlu layanan luar.
+
+Catatan: Fungsi load_dataset kini support jalankan dari pytest (path argumen)
+dan dari CLI. Struktur data tetap kompatibel dengan model lama.
 """
 
 from __future__ import annotations
@@ -56,33 +59,62 @@ def _parse_dt(s) -> datetime:
             return datetime.strptime(s, fmt)
         except ValueError:
             continue
-    raise ValueError(f"format waktu tidak valid: {s!r} (pakai 'YYYY-MM-DD HH:MM')")
+    raise ValueError(f"format waktu tidak valid: {s!r} (pakai 'YYYY-MM-DD HH:MM')" )
 
 
-def _load_parameters_from_json(path: str) -> Parameters:
-    """Baca parameter konfigurasi dari file JSON (tetap di JSON)."""
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+def _default_parameters() -> Parameters:
+    """Return default Parameters (digunakan saat dataset masih kosong)."""
     return Parameters(
-        priority_weights={Priority(k): int(v) for k, v in raw["parameters"]["priority_weights"].items()},
-        shift_start=_parse_dt(raw["parameters"]["shift_start"]),
-        busy_penalty=int(raw["parameters"].get("busy_penalty", 1_000_000)),
-        distribution_rule=raw["parameters"].get("distribution_rule", "Lowest Active Workload"),
-        tie_breaker=raw["parameters"].get("tie_breaker", "Technician ID"),
-        fallback_rule=raw["parameters"].get("fallback_rule", "Earliest Estimated Finish"),
+        priority_weights=dict(PRIORITY_WEIGHTS),
+        shift_start=datetime(2026, 9, 23, 8, 0, 0),
+    )
+
+
+def _load_parameters(raw: dict) -> Parameters:
+    """Ekstraksi parameters dari dict mentah (baik dari JSON maupun dict temp test)."""
+    return Parameters(
+        priority_weights={Priority(k): int(v) for k, v in raw.get("parameters", {}).get("priority_weights", {}).items()},
+        shift_start=_parse_dt(raw.get("parameters", {}).get("shift_start", "2026-09-23 08:00:00")),
+        busy_penalty=int(raw.get("parameters", {}).get("busy_penalty", 1_000_000)),
+        distribution_rule=raw.get("parameters", {}).get("distribution_rule", "Lowest Active Workload"),
+        tie_breaker=raw.get("parameters", {}).get("tie_breaker", "Technician ID"),
+        fallback_rule=raw.get("parameters", {}).get("fallback_rule", "Earliest Estimated Finish"),
     )
 
 
 def load_dataset(path: Optional[str] = None) -> Dataset:
-    """Muat dataset dari SQLite database (data/ticketing.db).
+    """Muat dataset.
 
-    Jika database masih kosong, fallback ke file JSON (data/tickets.json)
-    untuk migrasi satu kali.
+    Args:
+        path: Jika diberikan, coba baca dari file JSON sementara (seperti saat test pytest).
+              Jika file tersebut tidak ada, turun ke baca dari database SQLite
+              atau file JSON asli (data/tickets.json).
+        None: Baca langsung dari database SQLite atau file JSON asli.
+
+    Returns:
+        Dataset berisi parameters, technicians, dan tickets.
     """
-    from .db import get_db_connection, init_db
+    import sqlite3
 
-    init_db()
-    conn = get_db_connection()
+    # Jika ada path argumen (seperti test case bikin file sementara),
+    # coba baca dari file JSON tersebut dulu.
+    if path is not None:
+        if os.path.exists(path):
+            with open(path, "r", encoding="utf-8") as f:
+                raw = json.load(f)
+            params = _load_parameters(raw)
+            technicians = [
+                Technician(id=str(t["id"]), name=str(t["name"]), initial_status=TechStatus(str(t.get("initial_status", "Available"))))
+                for t in raw.get("technicians", [])
+            ]
+            tickets = [_ticket_from_dict(t) for t in raw.get("tickets", [])]
+            return Dataset(parameters=params, technicians=technicians, tickets=tickets)
+        # Jika path tadi tidak ada (file sementara test sudah expired/hapus),
+        # turun ke bawah baca dari database/file asli.
+
+    # Jika tidak ada path argumen, atau path tadi gaada:
+    # Coba baca dari database SQLite dulu.
+    conn = sqlite3.connect("data/ticketing.db")
     cursor = conn.cursor()
 
     cursor.execute("SELECT COUNT(*) FROM technicians")
@@ -90,182 +122,54 @@ def load_dataset(path: Optional[str] = None) -> Dataset:
     cursor.execute("SELECT COUNT(*) FROM tickets")
     ticket_count = cursor.fetchone()[0]
 
-    if tech_count == 0 and ticket_count == 0:
-        # Fallback: migrasi dari JSON (sekali saja)
-        json_path = path or DEFAULT_DATA_PATH
-        with open(json_path, "r", encoding="utf-8") as f:
-            raw = json.load(f)
-        params = Parameters(
-            priority_weights={Priority(k): int(v) for k, v in raw["parameters"]["priority_weights"].items()},
-            shift_start=_parse_dt(raw["parameters"]["shift_start"]),
-            busy_penalty=int(raw["parameters"].get("busy_penalty", 1_000_000)),
-            distribution_rule=raw["parameters"].get("distribution_rule", "Lowest Active Workload"),
-            tie_breaker=raw["parameters"].get("tie_breaker", "Technician ID"),
-            fallback_rule=raw["parameters"].get("fallback_rule", "Earliest Estimated Finish"),
-        )
+    if tech_count > 0 or ticket_count > 0:
+        # Database sudah punya data, baca dari SQLite
+        # Ambil config default parameters
+        params = _load_parameters({"parameters": {
+            "priority_weights": {Priority.LOW: 1, Priority.MEDIUM: 2, Priority.HIGH: 3},
+            "shift_start": "2026-09-23 08:00:00",
+            "busy_penalty": 1_000_000,
+            "distribution_rule": "Lowest Active Workload",
+            "tie_breaker": "Technician ID",
+            "fallback_rule": "Earliest Estimated Finish",
+        }})
+
+        cursor.execute("SELECT id, name, initial_status FROM technicians")
         technicians = [
-            Technician(
-                id=str(t["id"]),
-                name=str(t["name"]),
-                initial_status=TechStatus(str(t.get("initial_status", "Available"))),
-            )
-            for t in raw["technicians"]
+            Technician(id=row[0], name=row[1], initial_status=TechStatus(row[2]))
+            for row in cursor.fetchall()
         ]
-        tickets = [_ticket_from_dict(t) for t in raw["tickets"]]
+
+        cursor.execute("SELECT * FROM tickets")
+        tickets = []
+        for row in cursor.fetchall():
+            tickets.append(Ticket(
+                id=str(row[0]),
+                ticket_type=TicketType(row[1]),
+                created_by=str(row[2]),
+                timestamp=_parse_dt(row[3]),
+                category=str(row[4]),
+                detail=str(row[5]),
+                priority=Priority(str(row[6])),
+                duration=int(row[7]),
+                related_id=row[8],
+                requested_by=row[9],
+            ))
         conn.close()
         return Dataset(parameters=params, technicians=technicians, tickets=tickets)
 
-    params = _load_parameters_from_json(path or DEFAULT_DATA_PATH)
+    # Jika database masih kosong, baca dari file JSON asli (data/tickets.json)
+    json_path = "data/tickets.json"
+    if os.path.exists(json_path):
+        with open(json_path, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+        params = _load_parameters(raw)
+        technicians = [
+            Technician(id=str(t["id"]), name=str(t["name"]), initial_status=TechStatus(str(t.get("initial_status", "Available"))))
+            for t in raw.get("technicians", [])
+        ]
+        tickets = [_ticket_from_dict(t) for t in raw.get("tickets", [])]
+        return Dataset(parameters=params, technicians=technicians, tickets=tickets)
 
-    cursor.execute("SELECT id, name, initial_status FROM technicians")
-    technicians = [
-        Technician(id=row["id"], name=row["name"], initial_status=TechStatus(row["initial_status"]))
-        for row in cursor.fetchall()
-    ]
-
-    cursor.execute("SELECT * FROM tickets")
-    tickets = [
-        Ticket(
-            id=row["id"],
-            ticket_type=TicketType(row["ticket_type"]),
-            created_by=row["created_by"],
-            timestamp=_parse_dt(row["timestamp"]),
-            category=row["category"],
-            detail=row["detail"],
-            priority=Priority(row["priority"]),
-            duration=int(row["duration"]),
-            related_id=row["related_id"],
-            requested_by=row["requested_by"],
-        )
-        for row in cursor.fetchall()
-    ]
-
-    conn.close()
-    return Dataset(parameters=params, technicians=technicians, tickets=tickets)
-
-
-def _ticket_from_dict(d: dict) -> Ticket:
-    return Ticket(
-        id=str(d["id"]),
-        ticket_type=TicketType(str(d["ticket_type"])),
-        created_by=str(d["created_by"]),
-        timestamp=_parse_dt(d["timestamp"]),
-        category=str(d["category"]),
-        detail=str(d["detail"]),
-        priority=Priority(str(d["priority"])),
-        duration=int(d["duration"]),
-        related_id=d.get("related_id"),
-        requested_by=d.get("requested_by"),
-    )
-
-
-def save_dataset(dataset: Dataset, path: Optional[str] = None) -> str:
-    """Simpan dataset ke SQLite database (data/ticketing.db)."""
-    from .db import get_db_connection, init_db
-
-    init_db()
-    conn = get_db_connection()
-    cursor = conn.cursor()
-
-    cursor.execute("DELETE FROM technicians")
-    for t in dataset.technicians:
-        cursor.execute(
-            "INSERT INTO technicians VALUES (?, ?, ?)",
-            (t.id, t.name, t.initial_status.value),
-        )
-
-    cursor.execute("DELETE FROM tickets")
-    for t in dataset.tickets:
-        cursor.execute(
-            "INSERT INTO tickets VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                t.id,
-                t.ticket_type.value,
-                t.created_by,
-                t.timestamp.strftime("%Y-%m-%d %H:%M:%S"),
-                t.category,
-                t.detail,
-                t.priority.value,
-                int(t.duration),
-                t.related_id,
-                t.requested_by,
-            ),
-        )
-
-    conn.commit()
-    conn.close()
-    return "data/ticketing.db"
-
-
-# ---------------------------------------------------------------------------
-# Generator ID otomatis (counter terpisah per prefix)
-# ---------------------------------------------------------------------------
-
-
-class TicketIdGenerator:
-    """Counter ID terpisah per prefix: T-001, T-002, ... dan TK-001, TK-002, ...
-
-    Mencegah bentrok nomor saat dua pengguna input bersamaan.
-    """
-
-    def __init__(self, existing_ids: Optional[list] = None):
-        self.counters: dict = {"T-": 0, "TK-": 0}
-        if existing_ids:
-            for tid in existing_ids:
-                prefix, num = _split_id(tid)
-                if prefix in self.counters:
-                    self.counters[prefix] = max(self.counters[prefix], num)
-
-    def next(self, ticket_type) -> str:
-        """Terima TicketType atau nilai string-nya ('User Report'/'Technician Request')."""
-        if isinstance(ticket_type, TicketType):
-            prefix = ticket_type.prefix
-        else:
-            prefix = TicketType(str(ticket_type)).prefix
-        self.counters[prefix] += 1
-        return f"{prefix}{self.counters[prefix]:03d}"
-
-
-def _split_id(ticket_id: str):
-    """Pisah 'TK-002' -> ('TK-', 2); 'T-005' -> ('T-', 5)."""
-    tid = str(ticket_id).strip()
-    if tid.startswith("TK-"):
-        return "TK-", int(tid[3:])
-    if tid.startswith("T-"):
-        return "T-", int(tid[2:])
-    return "", 0
-
-
-def add_ticket(
-    dataset: Dataset,
-    ticket_type: str,
-    created_by: str,
-    timestamp,
-    category: str,
-    detail: str,
-    priority: str,
-    duration: int,
-    related_id: Optional[str] = None,
-    requested_by: Optional[str] = None,
-) -> Ticket:
-    """Tambah tiket baru ke dataset dengan ID otomatis.
-
-    Untuk Technician Request, created_by diisi 'Admin' dan related_id +
-    requested_by wajib (tiket bantuan harus terhubung ke kasus lain).
-    """
-    ttype = TicketType(ticket_type)
-    gen = TicketIdGenerator([t.id for t in dataset.tickets])
-    ticket = Ticket(
-        id=gen.next(ttype),
-        ticket_type=ttype,
-        created_by=created_by,
-        timestamp=_parse_dt(timestamp) if not isinstance(timestamp, datetime) else timestamp,
-        category=category,
-        detail=detail,
-        priority=Priority(priority),
-        duration=int(duration),
-        related_id=related_id,
-        requested_by=requested_by,
-    )
-    dataset.tickets.append(ticket)
-    return ticket
+    # Jika tidak ada data sama sekali, kembalikan Dataset kosong dengan default
+    return Dataset(parameters=_default_parameters(), technicians=[], tickets=[])
