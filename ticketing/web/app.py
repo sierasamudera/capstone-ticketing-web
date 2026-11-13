@@ -8,297 +8,308 @@ Jalankan::
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import argparse
+import os
+from datetime import datetime
 from typing import Optional
 
 from flask import (
     Flask,
     abort,
-    flash,
     redirect,
     render_template,
     request,
-    session,
+    send_from_directory,
     url_for,
+    flash,
     jsonify,
 )
+from flask_login import current_user
 
 from .. import __version__
-from ..models import CATEGORIES, PRIORITIES, TICKET_TYPES, TicketType, Priority, TechStatus
+from ..auth import (
+    authenticate,
+    do_login,
+    do_logout,
+    init_login_manager,
+    login_required,
+    require_any_role,
+)
+from ..models import CATEGORIES, PRIORITIES, TICKET_TYPES
 from ..scenarios import SCENARIOS
-from ..seed import DEFAULT_DATA_PATH, _default_parameters, _load_parameters, _dataset, save_dataset, Dataset, _ticket_from_dict
+from ..seed import DEFAULT_DATA_PATH, add_ticket, load_dataset, save_dataset
 from ..simulation import Simulation
 
-# ---------------------------------------------------------------------------
-# Konfigurasi Autentikasi Sederhana (BISA DIGANTI GANTI)
-# ---------------------------------------------------------------------------
-# Username/Password statis — untuk demo/prototype saja.
-# Di produksi gunakan hash password atau integrasi OAuth.
-USERS = {
-    # Admin — akses penuh
-    "admin": {"password": "admin123", "role": "admin"},
-    # Teknisi — masing-masing punya kredensial sendiri
-    "T01": {"password": "tech01", "role": "technician"},
-    "T02": {"password": "tech02", "role": "technician"},
-    "T03": {"password": "tech03", "role": "technician"},
-    # User/Pelapor — login cepat, terbatas fitur
-    "user": {"password": "guest", "role": "user"},
-}
-
-# Kunci rahasia sesi Flask (ganti dengan kunci acak di produksi)
-app = Flask(__name__)
-app.secret_key = "ticketing-sim-dev-change-this-secret"
-
-
-# ---------------------------------------------------------------------------
-# Bantuan (Helper) untuk cek role & login
-# ---------------------------------------------------------------------------
-
-def login_required(role: Optional[str] = None):
-    """Decorator: memastikan pengguna sudah login dan (opsional) memiliki role tertentu."""
-    def wrapper(fn):
-        @functools.wraps(fn)
-        def wrapped(*args, **kwargs):
-            if "username" not in session:
-                return redirect(url_for("login"))
-            user_role = USERS.get(session["username"], {}).get("role")
-            if user_role != session.get("_role"):
-                session.clear()
-                flash("Sesi berakhir atau role tidak valid.", "error")
-                return redirect(url_for("login"))
-            # Jika role spesifik diminta dan tidak cocok, tolak akses
-            if role and user_role != role:
-                flash("Anda tidak memiliki akses untuk halaman ini.", "error")
-                return redirect(url_for("index"))
-            return fn(*args, **kwargs)
-        return wrapped
-    return wrapper
-
-
-def owner_required(fn):
-    """Decorator: hanya admin yang bisa mengakses."""
-    @functools.wraps(fn)
-    def wrapped(*args, **kwargs):
-        if session.get("_role") != "admin":
-            flash("Hanya admin yang bisa mengakses fitur ini.", "error")
-            return redirect(url_for("index"))
-        return fn(*args, **kwargs)
-    return wrapped
-
-
-# ---------------------------------------------------------------------------
-# Fungsi bantuan dataset & simulasi (menggunakan session-based store)
-# ---------------------------------------------------------------------------
-
-def _build_sim(path: Optional[str] = None) -> Simulation:
-    return Simulation(_dataset(path))
-
-
-# ---------------------------------------------------------------------------
-# Rute: Login & Logout
-# ---------------------------------------------------------------------------
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    # Jika pengguna sudah login, arahkan ke index
-    if "username" in session:
-        return redirect(url_for("index"))
-
-    if request.method == "POST":
-        username = request.form.get("username", "").strip()
-        password = request.form.get("password", "").strip()
-        user_info = USERS.get(username)
-        if user_info and user_info["password"] == password:
-            session["username"] = username
-            session["_role"] = user_info["role"]
-            flash(f"Selamat datang, {username}!", "success")
-            # Arahkan berdasarkan role
-            if user_info["role"] == "admin":
-                return redirect(url_for("index"))
-            elif user_info["role"] == "technician":
-                # Teknisi langsung ke halaman simulasi dengan parameter skenario default (S1)
-                return redirect(url_for("index", _escaped_fragment_="S1"))
-            else:  # user
-                return redirect(url_for("index"))
-        else:
-            flash("Username atau password salah.", "error")
-    return render_template("login.html", error=None)
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    flash("Anda telah logout.", "info")
-    return redirect(url_for("login"))
-
-
-# ---------------------------------------------------------------------------
-# Rute: Utama & Dashboard
-# ---------------------------------------------------------------------------
-
-@app.route("/")
-@login_required()  # Butuh login, tapi role bebas untuk halaman awal
-def index():
-    # Ambil parameter session atau gunakan default
-    if "sim_start" not in session:
-        session["sim_start"] = datetime.now().strftime("%Y-%m-%d %H:%M")
-
-    sim = _build_sim()
-    result = sim.run_all()
-
-    # Tentukan skenario aktif dari query string (?active=S1) atau default None
-    active = request.args.get("active")
-
-    detail = None
-    if active and active in SCENARIOS:
-        sim = _build_sim()
-        ind = sim.run(active)
-        result = sim.run_all()
-        detail = ind
-
-    return render_template(
-        "index.html",
-        sim=sim,
-        result=result,
-        active_scenario=active,
-        detail=detail,
-        username=session.get("username"),
-        user_role=session.get("_role"),
-    )
-
-
-# ---------------------------------------------------------------------------
-# Rute: Skenario S1–S4 (Run & Indikator)
-# ---------------------------------------------------------------------------
-
-@app.route("/run/<key>")
-@login_required()  # Harus login
-def run_one(key: str):
-    if key not in SCENARIOS:
-        flash(f"Skenario tidak dikenal: {key}", "error")
-        return redirect(url_for("index"))
-
-    sim = _build_sim()
-    ind = sim.run(key)
-    result = sim.run_all()
-    return render_template(
-        "index.html",
-        sim=sim,
-        result=result,
-        active_scenario=key,
-        detail=ind,
-        username=session.get("username"),
-        user_role=session.get("_role"),
-    )
-
-
-@app.route("/api/indicators")
-@login_required()
-def api_indicators():
-    sim = _build_sim()
-    result = sim.run_all()
-    payload = {}
-    for k, ind in result.indicators.items():
-        payload[k] = {
-            "name": ind.name,
-            "gap_minutes": ind.gap_minutes,
-            "balance_index": ind.balance_index,
-            "jains_index": ind.jains_index,
-            "gap_weighted": ind.gap_weighted,
-            "jains_index_weighted": ind.jains_index_weighted,
-            "avg_waiting": ind.avg_waiting,
-            "max_waiting": ind.max_waiting,
-        }
-    return jsonify(payload)
-
-
-# ---------------------------------------------------------------------------
-# Rute: Tambah Tiket (Hanya Admin & Teknisi)
-# ---------------------------------------------------------------------------
-
-@app.route("/tickets", methods=["POST"])
-@login_required(role="admin")  # HANYA admin yang bisa menambah tiket via CLI/web
-def add_ticket_route():
-    form = request.form
-    try:
-        ttype = form["ticket_type"]
-        ds = _dataset()
-        related = form.get("related_id") or None
-        requested = form.get("requested_by") or None
-        if ttype == "Technician Request" and (not related or not requested):
-            flash(
-                "Technician Request wajib mengisi Related Ticket ID dan "
-                "Requested By (Technician).",
-                "error",
-            )
-            return redirect(url_for("index"))
-        ticket = add_ticket(
-            dataset=ds,
-            ticket_type=ttype,
-            created_by="Admin" if ttype == "User Report" else "Admin",
-            timestamp=datetime.strptime(
-                form["timestamp"], "%Y-%m-%dT%H:%M"
-            ),
-            category=form["category"],
-            detail=form["detail"],
-            priority=form["priority"],
-            duration=int(form["duration"]),
-            related_id=related,
-            requested_by=requested,
-        )
-        # reset cache supaya simulasi memakai dataset baru
-        _store["dataset"] = None
-        save_dataset(ds, _store["path"])
-        flash(
-            f"Tiket {ticket.id} ({ticket.ticket_type.value}) ditambahkan "
-            f"dan dataset disimpan.",
-            "success",
-        )
-    except ValueError as exc:
-        flash(f"Input tidak valid: {exc}", "error")
-    return redirect(url_for("index"))
-
-
-@app.route("/reset", methods=["POST"])
-@login_required(role="admin")
-def reset_data():
-    _store["dataset"] = None
-    _store["path"] = None
-    flash("Dataset dimuat ulang dari file.", "info")
-    return redirect(url_for("index"))
-
-
-# ---------------------------------------------------------------------------
-# Rute: Mockup multi-role (prefix /mockup/)
-# ---------------------------------------------------------------------------
+# Mockup multi-role (login + 62 halaman statis). Dilayani di bawah prefix
+# /mockup/ agar bisa demo online lewat tunnel/PaaS bersama app utama, walau
+# implementasi Flask per-role belum jadi. Path di mockup semuanya relatif,
+# jadi prefix tidak merusak link-nya.
 _MOCKUP_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
     "mockup",
 )
 
-
-@app.route("/mockup")
-def mockup_index():
-    return redirect(url_for("mockup_root"))
-
-
-@app.route("/mockup/", strict_slash=False)
-@app.route("/mockup/index.html")
-def mockup_root():
-    return send_from_directory(_MOCKUP_DIR, "index.html")
+# In-memory copy agar penambahan tiket tidak menulis file terus-menerus,
+# kecuali diminta simpan.
+_store: dict = {"dataset": None, "path": None}
 
 
-@app.route("/mockup/<path:filename>")
-def mockup_file(filename: str):
-    full = os.path.join(_MOCKUP_DIR, filename)
-    if os.path.commonpath([os.path.abspath(full), _MOCKUP_DIR]) != _MOCKUP_DIR:
-        abort(404)
-    return send_from_directory(_MOCKUP_DIR, filename)
+def _dataset(path: Optional[str] = None):
+    if _store["dataset"] is None or (path and path != _store["path"]):
+        _store["dataset"] = load_dataset(path or DEFAULT_DATA_PATH)
+        _store["path"] = path or DEFAULT_DATA_PATH
+    return _store["dataset"]
+
+
+def _build_sim(path: Optional[str] = None) -> Simulation:
+    return Simulation(_dataset(path))
+
+
+def create_app(data_path: Optional[str] = None) -> Flask:
+    app = Flask(__name__, template_folder="templates")
+    app.config["SECRET_KEY"] = "ticketing-sim-dev"
+    init_login_manager(app)
+    # Pastikan tabel users (dan seluruh skema DB) ada sebelum request pertama
+    # dijalankan — aman dipanggil berulang kali (CREATE TABLE IF NOT EXISTS).
+    from ..db import init_db
+    init_db()
+    if data_path:
+        _store["path"] = data_path
+
+    @app.context_processor
+    def inject_globals():
+        from .charts import VIZ_CSS, grouped_bar_chart
+
+        def workload_chart(result, technicians, weighted=False):
+            """Chart beban per teknisi per skenario.
+
+            Palet memakai var(--viz-series-*) dengan fallback hex, jadi chart
+            otomatis mengikuti tema (light/dark) lewat CSS tanpa re-render
+            server-side; tetap terbaca tanpa CSS variable.
+            """
+            cats = [(k, SCENARIOS[k]["name"]) for k in result.keys if k in SCENARIOS]
+            series = [(t.id, f"{t.id} {t.name}") for t in technicians]
+            values = {}
+            for ck, _ in cats:
+                ind = result[ck]
+                for sk, _ in series:
+                    load = ind.loads[sk]
+                    values[(ck, sk)] = (
+                        load.weighted_load if weighted else load.total_minutes
+                    )
+            return grouped_bar_chart(
+                categories=cats,
+                series=series,
+                values=values,
+                title=(
+                    "Beban Berbobot per Teknisi (pt-min)"
+                    if weighted
+                    else "Beban Durasi per Teknisi (menit)"
+                ),
+                unit="pt-min" if weighted else "menit",
+            )
+
+        return {
+            "version": __version__,
+            "categories": CATEGORIES,
+            "priorities": PRIORITIES,
+            "ticket_types": TICKET_TYPES,
+            "scenarios": SCENARIOS,
+            "workload_chart": workload_chart,
+            "viz_css": VIZ_CSS,
+        }
+
+    @app.route("/")
+    def index():
+        if current_user.is_authenticated:
+            return redirect(url_for("auth_dashboard"))
+        sim = _build_sim()
+        result = sim.run_all()
+        return render_template(
+            "index.html",
+            sim=sim,
+            result=result,
+            active_scenario=None,
+            detail=None,
+        )
+
+    # --- Autentikasi (login/logout/dashboard per role) ---------------------
+    @app.route("/login", methods=["GET", "POST"])
+    def login():
+        from flask import render_template_string
+
+        error = None
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            user = authenticate(username, password)
+            if user:
+                do_login(user)
+                flash(f"Selamat datang, {user.username}.", "success")
+                return redirect(url_for("auth_dashboard"))
+            else:
+                error = "Username atau password salah."
+        return render_template("login.html", error=error)
+
+    @app.route("/logout")
+    def logout():
+        do_logout()
+        flash("Anda sudah keluar.", "info")
+        return redirect(url_for("login"))
+
+    @app.route("/dashboard")
+    @login_required()
+    def auth_dashboard():
+        role = current_user.role
+        sim = _build_sim()
+        result = sim.run_all()
+        if role == "admin":
+            return render_template("admin_dashboard.html", sim=sim, result=result)
+        if role == "technician":
+            return render_template("technician_dashboard.html", sim=sim, result=result, user=current_user)
+        return render_template("reporter_dashboard.html", sim=sim, result=result, user=current_user)
+
+    # --- Mockup multi-role -------------------------------------------------
+    # Sajikan folder mockup/ di bawah /mockup/ untuk demo online. `index.html`
+    # di root mockup mengalihkan ke login.html, jadi /mockup/ = mulai dari
+    # halaman login, sama seperti dibuka via file://.
+    @app.route("/mockup")
+    def mockup_index():
+        return redirect(url_for("mockup_root"))
+
+    @app.route("/mockup/")
+    @app.route("/mockup/index.html")
+    def mockup_root():
+        return send_from_directory(_MOCKUP_DIR, "index.html")
+
+    @app.route("/mockup/<path:filename>")
+    def mockup_file(filename: str):
+        full = os.path.join(_MOCKUP_DIR, filename)
+        # tolak path yang keluar dari folder mockup (mis. "../../wsgi.py")
+        if os.path.commonpath([os.path.abspath(full), _MOCKUP_DIR]) != _MOCKUP_DIR:
+            abort(404)
+        return send_from_directory(_MOCKUP_DIR, filename)
+
+    @app.route("/run/<key>")
+    def run_one(key: str):
+        if key not in SCENARIOS:
+            flash(f"Skenario tidak dikenal: {key}", "error")
+            return redirect(url_for("index"))
+        sim = _build_sim()
+        ind = sim.run(key)
+        result = sim.run_all()
+        return render_template(
+            "index.html",
+            sim=sim,
+            result=result,
+            active_scenario=key,
+            detail=ind,
+        )
+
+    @app.route("/api/indicators")
+    def api_indicators():
+        sim = _build_sim()
+        result = sim.run_all()
+        payload = {}
+        for k, ind in result.indicators.items():
+            payload[k] = {
+                "name": ind.name,
+                "gap_minutes": ind.gap_minutes,
+                "balance_index": ind.balance_index,
+                "jains_index": ind.jains_index,
+                "gap_weighted": ind.gap_weighted,
+                "jains_index_weighted": ind.jains_index_weighted,
+                "avg_waiting": ind.avg_waiting,
+                "max_waiting": ind.max_waiting,
+            }
+        return jsonify(payload)
+
+    @app.route("/tickets", methods=["POST"])
+    def add_ticket_route():
+        form = request.form
+        try:
+            ttype = form["ticket_type"]
+            ds = _dataset()
+            related = form.get("related_id") or None
+            requested = form.get("requested_by") or None
+            if ttype == "Technician Request" and (not related or not requested):
+                flash(
+                    "Technician Request wajib mengisi Related Ticket ID dan "
+                    "Requested By (Technician).",
+                    "error",
+                )
+                return redirect(url_for("index"))
+            ticket = add_ticket(
+                dataset=ds,
+                ticket_type=ttype,
+                created_by=current_user.username if current_user.is_authenticated else ("User" if ttype == "User Report" else "Admin"),
+                timestamp=datetime.strptime(
+                    form["timestamp"], "%Y-%m-%dT%H:%M"
+                ),
+                category=form["category"],
+                detail=form["detail"],
+                priority=form["priority"],
+                duration=int(form["duration"]),
+                related_id=related,
+                requested_by=requested,
+            )
+            # reset cache supaya simulasi memakai dataset baru
+            _store["dataset"] = None
+            save_dataset(ds, _store["path"])
+            flash(
+                f"Tiket {ticket.id} ({ticket.ticket_type.value}) ditambahkan "
+                f"dan dataset disimpan.",
+                "success",
+            )
+        except ValueError as exc:
+            flash(f"Input tidak valid: {exc}", "error")
+
+        # Re-run simulasi untuk semua skenario agar indikator & grafik langsung update
+        sim = _build_sim()
+        result = sim.run_all()
+
+        # Simpan result ke session agar bisa dibaca template di halaman selanjutnya
+        session["last_result"] = {
+            "indicators": {
+                k: {
+                    "name": ind.name,
+                    "gap_minutes": ind.gap_minutes,
+                    "balance_index": ind.balance_index,
+                    "jains_index": ind.jains_index,
+                    "gap_weighted": ind.gap_weighted,
+                    "jains_index_weighted": ind.jains_index_weighted,
+                    "avg_waiting": ind.avg_waiting,
+                    "max_waiting": ind.max_waiting,
+                }
+                for k, ind in result.indicators.items()
+            },
+            "assignments_by_scenario": {
+                k: [{"ticket": a.ticket.id, "tech": a.tech_id, "status": a.status.value,
+                      "start": a.start.strftime("%H:%M"), "finish": a.finish.strftime("%H:%M"),
+                      "waiting": a.waiting, "rule": a.rule_note}
+                    for a in result.indicators[k].assignments]
+                for k in result.indicators
+            },
+            "technicians": [{"id": t.id, "name": t.name} for t in sim.technicians],
+            "tickets_count": len(sim.tickets),
+        }
+
+        return redirect(url_for("index"))
+
+    @app.route("/reset", methods=["POST"])
+    def reset_data():
+        _store["dataset"] = None
+        _store["path"] = None
+        flash("Dataset dimuat ulang dari file.", "info")
+        return redirect(url_for("index"))
+
+    return app
 
 
 # ---------------------------------------------------------------------------
 # CLI
 # ---------------------------------------------------------------------------
+
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description="Web app simulasi ticketing")

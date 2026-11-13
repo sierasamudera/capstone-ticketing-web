@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dashboard Admin — Simulasi Ticketing</title>
+
+<script>
+  (function () {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        },
+        colors: {
+          canvas:  { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+          panel:   { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+          panel2:  { DEFAULT: '#ffffff', dark: '#232321' },
+          ink:     { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+          ink2:    { DEFAULT: '#52514e', dark: '#c3c2b7' },
+          muted:   { DEFAULT: '#898781', dark: '#898781' },
+          line:    { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+          accent:  { DEFAULT: '#2a78d6', dark: '#3987e5' },
+          good:    { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+          danger:  { DEFAULT: '#d03b3b', dark: '#e66767' },
+        },
+      },
+    },
+  };
+</script>
+
+<style>
+  {{ viz_css|safe }}
+  [x-cloak] { display: none !important; }
+  .tbl { width: 100%; border-collapse: collapse; font-variant-numeric: tabular-nums; font-size: 0.8125rem; }
+  .tbl th { padding: 0.375rem 0.5rem; text-align: left; font-weight: 600; white-space: nowrap; color: #52514e; border-bottom: 1px solid #e1e0d9; }
+  html.dark .tbl th { color: #c3c2b7; border-color: #2c2c2a; }
+  .tbl td { padding: 0.375rem 0.5rem; border-bottom: 1px solid #e1e0d9; }
+  html.dark .tbl td { border-color: #2c2c2a; }
+  .tbl tbody tr:hover td { background: #ffffff; }
+  html.dark .tbl tbody tr:hover td { background: #232321; }
+  .tbl td.num, .tbl th.num { text-align: right; }
+</style>
+
+<script defer src="https://cdn.jsdelivr.net/npm/@alpinejs/collapse@3.14.1/dist/cdn.min.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.1/dist/cdn.min.js"></script>
+</head>
+
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased p-4 sm:p-6 lg:p-8">
+<div class="max-w-6xl mx-auto">
+
+  <!-- HEADER -->
+  <header class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
+    <div>
+      <div class="flex items-center gap-2">
+        <span class="px-2 py-0.5 rounded text-xs font-semibold bg-accent/10 text-accent dark:text-accent-dark">ADMIN DASHBOARD</span>
+        <h1 class="text-2xl font-bold tracking-tight">Manajemen Ticketing & Simulasi</h1>
+      </div>
+      <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">
+        Selamat datang, <strong>{{ current_user.username }}</strong>. Anda memiliki akses penuh ke sistem.
+      </p>
+    </div>
+    <div class="flex items-center gap-3">
+      <a href="{{ url_for('logout') }}" class="px-3 py-1.5 rounded-lg border border-danger/30 text-danger dark:text-danger-dark hover:bg-danger/10 text-xs font-medium transition">
+        Keluar
+      </a>
+      <button type="button"
+              x-data="{ dark: document.documentElement.classList.contains('dark') }"
+              @click="dark = !dark; document.documentElement.classList.toggle('dark', dark); localStorage.setItem('theme', dark ? 'dark' : 'light')"
+              class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-line dark:border-line-dark bg-panel dark:bg-panel-dark hover:bg-panel2 transition">
+        <svg x-show="!dark" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2m0 16v2M2 12h2m16 0h2M5 5l1.5 1.5M17.5 17.5L19 19m0-14-1.5 1.5M6.5 17.5 5 19"/></svg>
+        <svg x-show="dark" x-cloak class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8Z"/></svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- FLASH -->
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+      <div class="space-y-2 mb-6">
+        {% for cat, msg in messages %}
+          {% if cat == 'success' %}
+            <div class="flex gap-2 items-start px-4 py-2.5 rounded-lg border border-good/30 bg-good/10 text-good text-sm">{{ msg }}</div>
+          {% elif cat == 'error' %}
+            <div class="flex gap-2 items-start px-4 py-2.5 rounded-lg border border-danger/30 bg-danger/10 text-danger text-sm">{{ msg }}</div>
+          {% else %}
+            <div class="px-4 py-2.5 rounded-lg border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark text-ink2 text-sm">{{ msg }}</div>
+          {% endif %}
+        {% endfor %}
+      </div>
+    {% endif %}
+  {% endwith %}
+
+  <!-- STATS -->
+  {% set first = result.indicators['S1'] %}
+  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Total Tiket</div>
+      <div class="mt-1 text-2xl font-semibold">{{ first.total_tickets }}</div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Kasus Unik</div>
+      <div class="mt-1 text-2xl font-semibold">{{ first.unique_cases }}</div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Total Durasi</div>
+      <div class="mt-1 text-2xl font-semibold">{{ first.total_duration }} <span class="text-sm font-normal text-muted">mnt</span></div>
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+      <div class="text-xs text-muted dark:text-muted-dark">Jumlah Teknisi</div>
+      <div class="mt-1 text-2xl font-semibold">{{ sim.technicians|length }}</div>
+    </div>
+  </div>
+
+  <!-- COMPARISON TABLE -->
+  <h2 class="text-base font-semibold mb-3">Hasil Evaluasi Skenario Distribusi Beban</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 mb-8 overflow-x-auto">
+    <table class="tbl">
+      <thead><tr>
+        <th>Skenario</th><th>Aturan</th>
+        <th class="num">Max</th><th class="num">Min</th><th class="num">Gap</th>
+        <th class="num">Jain's</th><th class="num">Gap Berbobot</th><th class="num">Tunggu Avg</th>
+      </tr></thead>
+      <tbody>
+      {% for key, ind in result.indicators.items() %}
+        <tr>
+          <td class="font-semibold">{{ ind.name }}</td>
+          <td class="text-xs text-muted">{{ ind.rule }}</td>
+          <td class="num">{{ "%d:%02d"|format(ind.max_minutes//60, ind.max_minutes%60) }}</td>
+          <td class="num">{{ "%d:%02d"|format(ind.min_minutes//60, ind.min_minutes%60) }}</td>
+          <td class="num font-semibold">{{ ind.gap_minutes }}</td>
+          <td class="num">{{ "%.4f"|format(ind.jains_index) }}</td>
+          <td class="num">{{ ind.gap_weighted }}</td>
+          <td class="num">{{ "%.2f"|format(ind.avg_waiting) }}</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- CHARTS -->
+  <h2 class="text-base font-semibold mb-3">Grafik Perbandingan Beban Kerja</h2>
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-8 viz-root">
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      {{ workload_chart(result, sim.technicians, weighted=False)|safe }}
+    </div>
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+      {{ workload_chart(result, sim.technicians, weighted=True)|safe }}
+    </div>
+  </div>
+
+  <!-- FORM TAMBAH TIKET -->
+  <h2 class="text-base font-semibold mb-3">Input Tiket Baru (Admin)</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 mb-8">
+    <form method="post" action="{{ url_for('add_ticket_route') }}" x-data="{ type: 'User Report' }" class="space-y-4">
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div>
+          <label class="block text-xs text-muted mb-1">Jenis Tiket</label>
+          <select name="ticket_type" x-model="type" class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+            {% for t in ticket_types %}<option>{{ t }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Waktu Masuk</label>
+          <input name="timestamp" type="datetime-local" value="2026-09-23T14:00" required class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Kategori</label>
+          <select name="category" class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+            {% for c in categories %}<option>{{ c }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Prioritas</label>
+          <select name="priority" class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+            {% for p in priorities %}<option>{{ p }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Durasi (menit)</label>
+          <input name="duration" type="number" min="1" value="30" required class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs text-muted mb-1">Detail Kasus</label>
+        <input name="detail" type="text" placeholder="Detail permasalahan" required class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3" x-show="type === 'Technician Request'" x-cloak>
+        <div>
+          <label class="block text-xs text-muted mb-1">Related Ticket ID</label>
+          <input name="related_id" type="text" placeholder="T-001" class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+        </div>
+        <div>
+          <label class="block text-xs text-muted mb-1">Requested By (Teknisi)</label>
+          <select name="requested_by" class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2.5 py-1.5 text-sm">
+            <option value=""></option>
+            {% for t in sim.technicians %}<option>{{ t.id }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+      <button type="submit" class="px-4 py-2 rounded-md bg-accent text-white font-medium text-sm hover:brightness-110">Tambah Tiket</button>
+    </form>
+  </div>
+
+  <!-- TABLE ALL TICKETS -->
+  <h2 class="text-base font-semibold mb-3">Seluruh Tiket di Database ({{ sim.tickets|length }})</h2>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 overflow-x-auto">
+    <table class="tbl">
+      <thead><tr>
+        <th>ID</th><th>Jenis</th><th>Dibuat Oleh</th><th>Waktu</th><th>Kategori</th>
+        <th>Detail</th><th>Prioritas</th><th class="num">Durasi</th>
+      </tr></thead>
+      <tbody>
+      {% for t in sim.tickets | sort(attribute='timestamp') %}
+        <tr>
+          <td class="font-mono font-semibold">{{ t.id }}</td>
+          <td>{{ t.ticket_type.value }}</td>
+          <td>{{ t.created_by }}</td>
+          <td class="font-mono">{{ t.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td>{{ t.category }}</td>
+          <td>{{ t.detail }}</td>
+          <td>
+            {% if t.priority.value == "High" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger">High</span>
+            {% elif t.priority.value == "Medium" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent">Medium</span>
+            {% else %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good">Low</span>{% endif %}
+          </td>
+          <td class="num">{{ t.duration }} mnt</td>
+        </tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+</body>
+</html>
