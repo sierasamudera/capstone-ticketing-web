@@ -16,9 +16,11 @@ from typing import Optional
 from flask import (
     Flask,
     abort,
+    current_app,
     redirect,
     render_template,
     request,
+    session,
     send_from_directory,
     url_for,
     flash,
@@ -33,6 +35,7 @@ from ..auth import (
     do_logout,
     init_login_manager,
     login_required,
+    register_user,
     require_any_role,
 )
 from ..models import CATEGORIES, PRIORITIES, TICKET_TYPES
@@ -49,15 +52,20 @@ _MOCKUP_DIR = os.path.join(
     "mockup",
 )
 
+# Path absolut berbasis __file__ agar aman di semua working directory
+# (terutama PythonAnywhere di Linux).
+_BASE_DIR = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 # In-memory copy agar penambahan tiket tidak menulis file terus-menerus,
 # kecuali diminta simpan.
 _store: dict = {"dataset": None, "path": None}
 
 
 def _dataset(path: Optional[str] = None):
+    target = path or current_app.config.get("DATA_PATH") or DEFAULT_DATA_PATH
     if _store["dataset"] is None or (path and path != _store["path"]):
-        _store["dataset"] = load_dataset(path or DEFAULT_DATA_PATH)
-        _store["path"] = path or DEFAULT_DATA_PATH
+        _store["dataset"] = load_dataset(target)
+        _store["path"] = target
     return _store["dataset"]
 
 
@@ -65,14 +73,18 @@ def _build_sim(path: Optional[str] = None) -> Simulation:
     return Simulation(_dataset(path))
 
 
-def create_app(data_path: Optional[str] = None) -> Flask:
+def create_app(data_path: Optional[str] = None, db_path: Optional[str] = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
-    app.config["SECRET_KEY"] = "ticketing-sim-dev"
+    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ticketing-sim-dev-default")
+    # Selalu gunakan path absolut; None tidak pernah disimpan.
+    app.config["DATA_PATH"] = data_path or os.path.join(_BASE_DIR, "data", "tickets.json")
+    app.config["DB_PATH"] = db_path or os.path.join(_BASE_DIR, "data", "ticketing.db")
     init_login_manager(app)
     # Pastikan tabel users (dan seluruh skema DB) ada sebelum request pertama
     # dijalankan — aman dipanggil berulang kali (CREATE TABLE IF NOT EXISTS).
-    from ..db import init_db
-    init_db()
+    with app.app_context():
+        from ..db import init_db
+        init_db(app.config["DB_PATH"])
     if data_path:
         _store["path"] = data_path
 
@@ -120,18 +132,11 @@ def create_app(data_path: Optional[str] = None) -> Flask:
         }
 
     @app.route("/")
+    @login_required()
     def index():
         if current_user.is_authenticated:
             return redirect(url_for("auth_dashboard"))
-        sim = _build_sim()
-        result = sim.run_all()
-        return render_template(
-            "index.html",
-            sim=sim,
-            result=result,
-            active_scenario=None,
-            detail=None,
-        )
+        return redirect(url_for("login"))
 
     # --- Autentikasi (login/logout/dashboard per role) ---------------------
     @app.route("/login", methods=["GET", "POST"])
@@ -156,6 +161,23 @@ def create_app(data_path: Optional[str] = None) -> Flask:
         do_logout()
         flash("Anda sudah keluar.", "info")
         return redirect(url_for("login"))
+
+    @app.route("/register", methods=["GET", "POST"])
+    def register():
+        if current_user.is_authenticated:
+            return redirect(url_for("auth_dashboard"))
+        error = None
+        if request.method == "POST":
+            username = request.form.get("username", "").strip()
+            password = request.form.get("password", "")
+            try:
+                user = register_user(username, password)
+                do_login(user)
+                flash(f"Akun pelapor '{user.username}' berhasil dibuat. Selamat datang!", "success")
+                return redirect(url_for("auth_dashboard"))
+            except ValueError as exc:
+                error = str(exc)
+        return render_template("register.html", error=error)
 
     @app.route("/dashboard")
     @login_required()
@@ -191,6 +213,7 @@ def create_app(data_path: Optional[str] = None) -> Flask:
         return send_from_directory(_MOCKUP_DIR, filename)
 
     @app.route("/run/<key>")
+    @login_required(role="admin")
     def run_one(key: str):
         if key not in SCENARIOS:
             flash(f"Skenario tidak dikenal: {key}", "error")
@@ -207,6 +230,7 @@ def create_app(data_path: Optional[str] = None) -> Flask:
         )
 
     @app.route("/api/indicators")
+    @login_required()
     def api_indicators():
         sim = _build_sim()
         result = sim.run_all()
@@ -224,25 +248,64 @@ def create_app(data_path: Optional[str] = None) -> Flask:
             }
         return jsonify(payload)
 
+    def _redirect_by_role() -> str:
+        """Arahkan ke dashboard sesuai role user yang login."""
+        if current_user.is_authenticated:
+            return url_for("auth_dashboard")
+        return url_for("login")
+
+
     @app.route("/tickets", methods=["POST"])
+    @login_required()
     def add_ticket_route():
         form = request.form
+        ds = _dataset()
+        role = current_user.role
+
         try:
-            ttype = form["ticket_type"]
-            ds = _dataset()
-            related = form.get("related_id") or None
-            requested = form.get("requested_by") or None
-            if ttype == "Technician Request" and (not related or not requested):
-                flash(
-                    "Technician Request wajib mengisi Related Ticket ID dan "
-                    "Requested By (Technician).",
-                    "error",
-                )
-                return redirect(url_for("index"))
+            if role == "user":
+                # Pelapor hanya boleh membuat User Report.
+                ttype = "User Report"
+                created_by = current_user.username
+                related = None
+                requested = None
+            elif role == "technician":
+                # Teknisi hanya boleh membuat Technician Request.
+                ttype = "Technician Request"
+                created_by = current_user.username
+                related = form.get("related_id") or None
+                requested = current_user.tech_id
+                if not related:
+                    flash(
+                        "Technician Request wajib memilih Related Ticket ID.",
+                        "error",
+                    )
+                    return redirect(_redirect_by_role())
+                # related_id harus merujuk tiket yang sudah ada di dataset.
+                existing_ids = {t.id for t in ds.tickets}
+                if related not in existing_ids:
+                    flash(f"Related Ticket ID '{related}' tidak ditemukan.", "error")
+                    return redirect(_redirect_by_role())
+            elif role == "admin":
+                ttype = form["ticket_type"]
+                created_by = current_user.username
+                related = form.get("related_id") or None
+                requested = form.get("requested_by") or None
+                if ttype == "Technician Request" and (not related or not requested):
+                    flash(
+                        "Technician Request wajib mengisi Related Ticket ID dan "
+                        "Requested By (Technician).",
+                        "error",
+                    )
+                    return redirect(_redirect_by_role())
+            else:
+                flash("Role tidak dikenal.", "error")
+                return redirect(_redirect_by_role())
+
             ticket = add_ticket(
                 dataset=ds,
                 ticket_type=ttype,
-                created_by=current_user.username if current_user.is_authenticated else ("User" if ttype == "User Report" else "Admin"),
+                created_by=created_by,
                 timestamp=datetime.strptime(
                     form["timestamp"], "%Y-%m-%dT%H:%M"
                 ),
@@ -255,7 +318,10 @@ def create_app(data_path: Optional[str] = None) -> Flask:
             )
             # reset cache supaya simulasi memakai dataset baru
             _store["dataset"] = None
-            save_dataset(ds, _store["path"])
+            # Simpan ke data/tickets.json (satu sumber kebenaran untuk
+            # tiket + teknisi) agar perubahan persisten dan dibaca lagi
+            # oleh load_dataset() pada request berikutnya.
+            save_dataset(ds, app.config["DATA_PATH"])
             flash(
                 f"Tiket {ticket.id} ({ticket.ticket_type.value}) ditambahkan "
                 f"dan dataset disimpan.",
@@ -294,14 +360,24 @@ def create_app(data_path: Optional[str] = None) -> Flask:
             "tickets_count": len(sim.tickets),
         }
 
-        return redirect(url_for("index"))
+        return redirect(_redirect_by_role())
 
     @app.route("/reset", methods=["POST"])
+    @login_required(role="admin")
     def reset_data():
         _store["dataset"] = None
         _store["path"] = None
         flash("Dataset dimuat ulang dari file.", "info")
         return redirect(url_for("index"))
+
+    # --- Error handler 403 / 404 -------------------------------------------
+    @app.errorhandler(403)
+    def forbidden(_e):
+        return render_template("403.html"), 403
+
+    @app.errorhandler(404)
+    def not_found(_e):
+        return render_template("404.html"), 404
 
     return app
 

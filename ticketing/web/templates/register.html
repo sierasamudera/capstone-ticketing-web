@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Daftar Pelapor — Simulasi Ticketing</title>
+
+<script>
+  (function () {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        },
+        colors: {
+          canvas:  { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+          panel:   { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+          panel2:  { DEFAULT: '#ffffff', dark: '#232321' },
+          ink:     { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+          ink2:    { DEFAULT: '#52514e', dark: '#c3c2b7' },
+          muted:   { DEFAULT: '#898781', dark: '#898781' },
+          line:    { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+          accent:  { DEFAULT: '#2a78d6', dark: '#3987e5' },
+          good:    { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+          danger:  { DEFAULT: '#d03b3b', dark: '#e66767' },
+        },
+      },
+    },
+  };
+</script>
+</head>
+
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased">
+<div class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md">
+    <div class="text-center mb-8">
+      <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-accent dark:bg-accent-dark text-white text-2xl font-bold">ST</div>
+      <h1 class="mt-4 text-2xl font-bold tracking-tight">Simulasi Ticketing</h1>
+      <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">Daftar sebagai pelapor</p>
+    </div>
+
+    <div class="rounded-2xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-6 shadow-sm">
+      <h2 class="text-lg font-bold">Daftar Pelapor</h2>
+      <p class="mt-1 text-sm text-ink2 dark:text-ink2-dark">
+        Pendaftaran terbuka hanya untuk <strong>pelapor</strong>. Akun teknisi
+        dan admin dibuat oleh admin lewat menu Manajemen Teknisi, supaya daftar
+        teknisi tetap terkontrol — mesin distribusi beban membutuhkan daftar
+        teknisi aktif yang valid.
+      </p>
+
+      <form method="post" action="{{ url_for('register') }}" class="mt-5 space-y-4">
+        {% if error %}
+          <div class="flex gap-2 items-start px-3 py-2 rounded-lg border border-danger/30 bg-danger/10 text-danger dark:text-danger-dark text-sm">
+            {{ error }}
+          </div>
+        {% endif %}
+
+        <div>
+          <label for="nama" class="block text-xs text-muted dark:text-muted-dark mb-1">Nama Lengkap</label>
+          <input id="nama" name="nama" type="text" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+                 placeholder="contoh: Budi Santoso">
+        </div>
+
+        <div>
+          <label for="username" class="block text-xs text-muted dark:text-muted-dark mb-1">Username</label>
+          <input id="username" name="username" type="text" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+                 placeholder="contoh: budi_s">
+        </div>
+
+        <div>
+          <label for="password" class="block text-xs text-muted dark:text-muted-dark mb-1">Password</label>
+          <input id="password" name="password" type="password" required
+                 class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+                 placeholder="minimal 4 karakter">
+        </div>
+
+        <button type="submit"
+                class="w-full rounded-md bg-accent dark:bg-accent-dark hover:brightness-110 text-white px-4 py-2 text-sm font-medium transition">
+          Daftar
+        </button>
+      </form>
+
+      <p class="mt-6 text-center text-sm text-ink2 dark:text-ink2-dark">
+        Sudah punya akun?
+        <a href="{{ url_for('login') }}" class="font-medium text-accent dark:text-accent-dark hover:underline">Masuk</a>
+      </p>
+    </div>
+
+    <p class="mt-6 text-center text-xs text-muted dark:text-muted-dark">
+      Akun demo: admin/admin123, t01/tech01, pelapor/pelapor123 (lihat README).
+    </p>
+  </div>
+</body>
+</html>

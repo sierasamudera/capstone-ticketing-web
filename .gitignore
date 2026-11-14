@@ -1,2 +1,7 @@
 ticketing.db
+__pycache__
+app_auth.txt
 generate_docx.py
+
+__pycache__/
+*.pyc

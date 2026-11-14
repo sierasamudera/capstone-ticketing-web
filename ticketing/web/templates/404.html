@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="id" class="h-full">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tidak Ditemukan — Simulasi Ticketing</title>
+
+<script>
+  (function () {
+    var t = localStorage.getItem('theme');
+    if (t === 'dark' || (!t && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+      document.documentElement.classList.add('dark');
+    }
+  })();
+</script>
+
+<script src="https://cdn.tailwindcss.com/3.4.17"></script>
+<script>
+  tailwind.config = {
+    darkMode: 'class',
+    theme: {
+      extend: {
+        fontFamily: {
+          sans: ['system-ui', '-apple-system', '"Segoe UI"', 'sans-serif'],
+          mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Consolas', 'monospace'],
+        },
+        colors: {
+          canvas:  { DEFAULT: '#f9f9f7', dark: '#0d0d0d' },
+          panel:   { DEFAULT: '#fcfcfb', dark: '#1a1a19' },
+          panel2:  { DEFAULT: '#ffffff', dark: '#232321' },
+          ink:     { DEFAULT: '#0b0b0b', dark: '#ffffff' },
+          ink2:    { DEFAULT: '#52514e', dark: '#c3c2b7' },
+          muted:   { DEFAULT: '#898781', dark: '#898781' },
+          line:    { DEFAULT: '#e1e0d9', dark: '#2c2c2a' },
+          accent:  { DEFAULT: '#2a78d6', dark: '#3987e5' },
+          good:    { DEFAULT: '#0ca30c', dark: '#0ca30c' },
+          danger:  { DEFAULT: '#d03b3b', dark: '#e66767' },
+        },
+      },
+    },
+  };
+</script>
+</head>
+
+<body class="h-full bg-canvas dark:bg-canvas-dark text-ink dark:text-ink-dark font-sans antialiased">
+<div class="min-h-screen flex items-center justify-center p-4">
+  <div class="w-full max-w-md text-center">
+    <div class="text-6xl font-bold text-muted dark:text-muted-dark tabular-nums">404</div>
+    <h1 class="mt-4 text-xl font-bold tracking-tight">Halaman Tidak Ditemukan</h1>
+    <p class="mt-2 text-sm text-ink2 dark:text-ink2-dark">
+      URL yang Anda buka tidak ada di sistem.
+    </p>
+    <div class="mt-6 flex flex-wrap justify-center gap-2">
+      <a href="{{ url_for('auth_dashboard') if current_user.is_authenticated else url_for('login') }}"
+         class="px-4 py-2 rounded-md bg-accent dark:bg-accent-dark text-white text-sm font-medium hover:brightness-110">
+        Ke halaman utama
+      </a>
+    </div>
+  </div>
+</body>
+</html>
