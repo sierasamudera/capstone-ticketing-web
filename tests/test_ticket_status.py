@@ -6,6 +6,7 @@ ticketing.db, jangan pernah menulis ke data/ asli.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
