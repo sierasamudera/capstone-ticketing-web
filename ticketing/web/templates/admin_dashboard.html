@@ -215,30 +215,82 @@
   </div>
 
   <!-- TABLE ALL TICKETS -->
-  <h2 class="text-base font-semibold mb-3">Seluruh Tiket di Database ({{ sim.tickets|length }})</h2>
+  
+  <!-- TABLE ALL TICKETS + REASSIGNMENT -->
+  <h2 class="text-base font-semibold mb-3">
+    Manajemen Tiket Operasional ({{ ticket_rows|length }})
+  </h2>
+
   <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 overflow-x-auto">
     <table class="tbl">
-      <thead><tr>
-        <th>ID</th><th>Jenis</th><th>Dibuat Oleh</th><th>Waktu</th><th>Kategori</th>
-        <th>Detail</th><th>Prioritas</th><th class="num">Durasi</th>
-      </tr></thead>
-      <tbody>
-      {% for t in sim.tickets | sort(attribute='timestamp') %}
+      <thead>
         <tr>
-          <td class="font-mono font-semibold">{{ t.id }}</td>
-          <td>{{ t.ticket_type.value }}</td>
-          <td>{{ t.created_by }}</td>
-          <td class="font-mono">{{ t.timestamp.strftime("%Y-%m-%d %H:%M") }}</td>
-          <td>{{ t.category }}</td>
-          <td>{{ t.detail }}</td>
-          <td>
-            {% if t.priority.value == "High" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger">High</span>
-            {% elif t.priority.value == "Medium" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent">Medium</span>
-            {% else %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good">Low</span>{% endif %}
-          </td>
-          <td class="num">{{ t.duration }} mnt</td>
+          <th>ID</th>
+          <th>Jenis</th>
+          <th>Detail</th>
+          <th>Prioritas</th>
+          <th>Teknisi</th>
+          <th>Status</th>
+          <th>Assignment</th>
+          <th>Reassign Tiket</th>
         </tr>
-      {% endfor %}
+      </thead>
+      <tbody>
+        {% for row in ticket_rows %}
+        <tr>
+          <td class="font-mono font-semibold">{{ row.id }}</td>
+          <td>{{ row.ticket_type }}</td>
+          <td>{{ row.detail }}</td>
+          <td>{{ row.priority }}</td>
+          <td>{{ row.assigned_to or '-' }}</td>
+          <td>
+            {% if row.status == 'Resolved' %}
+              <span class="text-good font-medium">Resolved</span>
+            {% elif row.status == 'In Progress' %}
+              <span class="text-accent font-medium">In Progress</span>
+            {% else %}
+              <span class="text-muted font-medium">Open</span>
+            {% endif %}
+          </td>
+          <td>{{ row.assignment_type }}</td>
+          <td>
+            {% if row.status == 'Open' %}
+            <form method="post"
+                  action="{{ url_for('reassign_ticket', ticket_id=row.id) }}"
+                  class="space-y-2 min-w-52">
+
+              <select name="technician" required
+                      class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2 py-1.5 text-xs">
+                <option value="">Pilih teknisi</option>
+                {% for tech in technicians %}
+                  <option value="{{ tech.id }}"
+                    {% if tech.id == row.assigned_to %}disabled{% endif %}>
+                    {{ tech.id }} - {{ tech.name }}
+                  </option>
+                {% endfor %}
+              </select>
+
+              <input type="text" name="reason" required minlength="5"
+                     placeholder="Alasan reassignment"
+                     class="w-full rounded-md border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark px-2 py-1.5 text-xs">
+
+              <button type="submit"
+                      class="w-full rounded-md bg-accent text-white px-3 py-1.5 text-xs font-medium hover:brightness-110">
+                Pindahkan Tiket
+              </button>
+            </form>
+            {% else %}
+              <span class="text-xs text-muted">Tidak dapat dipindahkan</span>
+            {% endif %}
+          </td>
+        </tr>
+        {% else %}
+        <tr>
+          <td colspan="8" class="text-center py-4 text-muted">
+            Belum ada tiket.
+          </td>
+        </tr>
+        {% endfor %}
       </tbody>
     </table>
   </div>

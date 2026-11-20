@@ -75,64 +75,144 @@
     </div>
   </header>
 
-  <!-- ASSIGNED TICKETS IN S2 SCENARIO -->
-  {% set s2_assignments = result.indicators['S2'].assignments %}
-  {% set my_tickets = [] %}
-  {% for a in s2_assignments %}
-    {% if a.tech_id == user.tech_id %}
-      {% set _ = my_tickets.append(a) %}
-    {% endif %}
-  {% endfor %}
+<!-- OPERATIONAL TICKETS -->
+{% set my_tickets = ticket_rows %}
+{% set total_dur = namespace(val=0) %}
+{% set open_count = namespace(val=0) %}
+{% set progress_count = namespace(val=0) %}
+{% set resolved_count = namespace(val=0) %}
 
-  <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
-    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
-      <div class="text-xs text-muted">Jumlah Tiket Penugasan (S2)</div>
-      <div class="mt-1 text-2xl font-semibold">{{ my_tickets|length }}</div>
-    </div>
-    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
-      <div class="text-xs text-muted">Total Beban Pengerjaan</div>
-      {% set total_dur = namespace(val=0) %}
-      {% for a in my_tickets %}{% set total_dur.val = total_dur.val + a.ticket.duration %}{% endfor %}
-      <div class="mt-1 text-2xl font-semibold">{{ total_dur.val }} <span class="text-sm font-normal text-muted">menit</span></div>
-    </div>
-    <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
-      <div class="text-xs text-muted">Perkiraan Selesai Terakhir</div>
-      {% if my_tickets %}
-        <div class="mt-1 text-2xl font-semibold font-mono">{{ my_tickets[-1].finish.strftime("%H:%M") }}</div>
-      {% else %}
-        <div class="mt-1 text-2xl font-semibold">—</div>
-      {% endif %}
+{% for t in my_tickets %}
+  {% set total_dur.val = total_dur.val + (t.duration|int) %}
+  {% if t.status == 'Open' %}
+    {% set open_count.val = open_count.val + 1 %}
+  {% elif t.status == 'In Progress' %}
+    {% set progress_count.val = progress_count.val + 1 %}
+  {% elif t.status == 'Resolved' %}
+    {% set resolved_count.val = resolved_count.val + 1 %}
+  {% endif %}
+{% endfor %}
+
+<div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-8">
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+    <div class="text-xs text-muted">Total Tiket Ditugaskan</div>
+    <div class="mt-1 text-2xl font-semibold">{{ my_tickets|length }}</div>
+  </div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+    <div class="text-xs text-muted">Total Estimasi Beban</div>
+    <div class="mt-1 text-2xl font-semibold">
+      {{ total_dur.val }} <span class="text-sm font-normal text-muted">menit</span>
     </div>
   </div>
+  <div class="rounded-xl border border-line dark:border-line-dark bg-panel2 dark:bg-panel2-dark p-4">
+    <div class="text-xs text-muted">Tiket Belum Selesai</div>
+    <div class="mt-1 text-2xl font-semibold">
+      {{ open_count.val + progress_count.val }}
+    </div>
+    <div class="text-xs text-muted mt-1">
+      Open: {{ open_count.val }} · In Progress: {{ progress_count.val }} · Resolved: {{ resolved_count.val }}
+    </div>
+  </div>
+</div>
 
-  <h2 class="text-base font-semibold mb-3">Daftar Penugasan Tiket (Skenario S2 Cumulative)</h2>
-  <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4 mb-8 overflow-x-auto">
-    <table class="tbl">
-      <thead><tr>
-        <th>ID Tiket</th><th>Masuk</th><th>Kategori</th><th>Detail Kasus</th>
-        <th>Prioritas</th><th>Waktu Mulai</th><th>Perkiraan Selesai</th><th class="num">Durasi</th>
-      </tr></thead>
-      <tbody>
-      {% for a in my_tickets %}
-        <tr>
-          <td class="font-mono font-semibold">{{ a.ticket.id }}</td>
-          <td class="font-mono">{{ a.arrival.strftime("%H:%M") }}</td>
-          <td>{{ a.ticket.category }}</td>
-          <td>{{ a.ticket.detail }}</td>
-          <td>
-            {% if a.ticket.priority.value == "High" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-danger/10 text-danger">High</span>
-            {% elif a.ticket.priority.value == "Medium" %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-accent/10 text-accent">Medium</span>
-            {% else %}<span class="px-2 py-0.5 rounded-full text-[11px] bg-good/10 text-good">Low</span>{% endif %}
-          </td>
-          <td class="font-mono">{{ a.start.strftime("%H:%M") }}</td>
-          <td class="font-mono font-semibold">{{ a.finish.strftime("%H:%M") }}</td>
-          <td class="num">{{ a.ticket.duration }} mnt</td>
-        </tr>
-      {% else %}
-        <tr><td colspan="8" class="text-center py-4 text-muted">Belum ada tiket ditugaskan.</td></tr>
-      {% endfor %}
-      </tbody>
-    </table>
+  
+  <!-- OPERATIONAL TICKET LIST -->
+  <h2 class="text-base font-semibold mb-3">
+    Daftar Tiket Operasional
+  </h2>
+
+  <div class="space-y-4 mb-8">
+    {% for ticket in my_tickets %}
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-4">
+
+      <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+        <div>
+          <div class="font-mono font-semibold">{{ ticket.id }}</div>
+          <div class="text-xs text-muted">{{ ticket.timestamp }}</div>
+        </div>
+
+        {% if ticket.status == 'Open' %}
+          <span class="px-2 py-1 rounded-full text-xs bg-muted/10 text-muted">
+            Open
+          </span>
+        {% elif ticket.status == 'In Progress' %}
+          <span class="px-2 py-1 rounded-full text-xs bg-accent/10 text-accent">
+            In Progress
+          </span>
+        {% else %}
+          <span class="px-2 py-1 rounded-full text-xs bg-good/10 text-good">
+            Resolved
+          </span>
+        {% endif %}
+      </div>
+
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-3 text-sm mb-3">
+        <div>
+          <p class="text-xs text-muted">Jenis Tiket</p>
+          <p>{{ ticket.ticket_type }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-muted">Kategori</p>
+          <p>{{ ticket.category }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-muted">Prioritas</p>
+          <p>{{ ticket.priority }}</p>
+        </div>
+        <div>
+          <p class="text-xs text-muted">Durasi</p>
+          <p>{{ ticket.duration }} menit</p>
+        </div>
+      </div>
+
+      <div class="mb-4">
+        <p class="text-xs text-muted mb-1">Detail Kasus</p>
+        <p class="text-sm">{{ ticket.detail }}</p>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-between gap-3 border-t border-line dark:border-line-dark pt-3">
+
+        <span class="text-xs text-muted">
+          Assignment: {{ ticket.assignment_type }}
+        </span>
+
+        {% if ticket.status == 'Open' %}
+          <form method="post"
+                action="{{ url_for('change_ticket_status', ticket_id=ticket.id) }}">
+            <input type="hidden" name="status" value="In Progress">
+            <button type="submit"
+                    class="px-4 py-2 rounded-md bg-accent text-white text-sm font-medium hover:brightness-110">
+              Mulai Pengerjaan
+            </button>
+          </form>
+
+        {% elif ticket.status == 'In Progress' %}
+          <form method="post"
+                action="{{ url_for('change_ticket_status', ticket_id=ticket.id) }}">
+            <input type="hidden" name="status" value="Resolved">
+            <button type="submit"
+                    class="px-4 py-2 rounded-md bg-good text-white text-sm font-medium hover:brightness-110">
+              Selesaikan Tiket
+            </button>
+          </form>
+
+        {% else %}
+          <span class="text-sm font-medium text-good">
+            <span aria-hidden="true">✓</span> Tiket telah diselesaikan
+          </span>
+        {% endif %}
+
+      </div>
+    </div>
+
+    {% else %}
+    <div class="rounded-xl border border-line dark:border-line-dark bg-panel dark:bg-panel-dark p-6 text-center">
+      <p class="font-medium">Belum ada tiket untuk Anda.</p>
+      <p class="text-sm text-muted mt-1">
+        Tiket yang ditugaskan kepada Anda akan muncul di sini.
+      </p>
+    </div>
+    {% endfor %}
   </div>
 
   <!-- FORM MINTA BANTUAN (TECHNICIAN REQUEST) -->

@@ -40,8 +40,16 @@ from ..auth import (
 )
 from ..models import CATEGORIES, PRIORITIES, TICKET_TYPES
 from ..scenarios import SCENARIOS
-from ..seed import DEFAULT_DATA_PATH, add_ticket, load_dataset, save_dataset
+from ..seed import (
+    DEFAULT_DATA_PATH,
+    add_ticket,
+    load_dataset,
+    save_dataset,
+    save_dataset_to_db,
+)
 from ..simulation import Simulation
+from .. import ticket_state
+from ..db import get_db_connection
 
 # Mockup multi-role (login + 62 halaman statis). Dilayani di bawah prefix
 # /mockup/ agar bisa demo online lewat tunnel/PaaS bersama app utama, walau
@@ -63,9 +71,24 @@ _store: dict = {"dataset": None, "path": None}
 
 def _dataset(path: Optional[str] = None):
     target = path or current_app.config.get("DATA_PATH") or DEFAULT_DATA_PATH
-    if _store["dataset"] is None or (path and path != _store["path"]):
-        _store["dataset"] = load_dataset(target)
-        _store["path"] = target
+    backend = current_app.config.get("DB_BACKEND", "sqlite")
+
+    cache_key = (
+        ("postgres", current_app.config.get("DATABASE_URL"))
+        if backend == "postgres"
+        else ("sqlite", target)
+    )
+
+    if _store["dataset"] is None or _store["path"] != cache_key:
+        if backend == "postgres":
+            from ..seed import load_dataset_from_db
+
+            _store["dataset"] = load_dataset_from_db(target)
+        else:
+            _store["dataset"] = load_dataset(target)
+
+        _store["path"] = cache_key
+
     return _store["dataset"]
 
 
@@ -73,18 +96,49 @@ def _build_sim(path: Optional[str] = None) -> Simulation:
     return Simulation(_dataset(path))
 
 
+
 def create_app(data_path: Optional[str] = None, db_path: Optional[str] = None) -> Flask:
     app = Flask(__name__, template_folder="templates")
-    app.config["SECRET_KEY"] = os.environ.get("SECRET_KEY", "ticketing-sim-dev-default")
-    # Selalu gunakan path absolut; None tidak pernah disimpan.
-    app.config["DATA_PATH"] = data_path or os.path.join(_BASE_DIR, "data", "tickets.json")
-    app.config["DB_PATH"] = db_path or os.path.join(_BASE_DIR, "data", "ticketing.db")
+
+    app.config["SECRET_KEY"] = os.environ.get(
+        "SECRET_KEY", "ticketing-sim-dev-default"
+    )
+
+    app.config["DATA_PATH"] = (
+        data_path or os.path.join(_BASE_DIR, "data", "tickets.json")
+    )
+
+    database_url = os.environ.get("DATABASE_URL")
+    requested_backend = os.environ.get("DB_BACKEND", "").lower()
+
+    # db_path eksplisit selalu berarti SQLite (penting untuk pytest).
+    # PostgreSQL digunakan di Vercel atau jika DB_BACKEND=postgres.
+    use_postgres = (
+        db_path is None
+        and database_url is not None
+        and (
+            requested_backend == "postgres"
+            or os.environ.get("VERCEL") == "1"
+        )
+    )
+
+    app.config["DB_BACKEND"] = "postgres" if use_postgres else "sqlite"
+    app.config["DATABASE_URL"] = database_url
+    app.config["DB_PATH"] = (
+        db_path or os.path.join(_BASE_DIR, "data", "ticketing.db")
+    )
+
     init_login_manager(app)
-    # Pastikan tabel users (dan seluruh skema DB) ada sebelum request pertama
-    # dijalankan — aman dipanggil berulang kali (CREATE TABLE IF NOT EXISTS).
+
     with app.app_context():
         from ..db import init_db
-        init_db(app.config["DB_PATH"])
+
+        init_db(
+            db_path=app.config["DB_PATH"],
+            backend=app.config["DB_BACKEND"],
+            database_url=app.config["DATABASE_URL"],
+        )
+
     if data_path:
         _store["path"] = data_path
 
@@ -179,18 +233,72 @@ def create_app(data_path: Optional[str] = None, db_path: Optional[str] = None) -
                 error = str(exc)
         return render_template("register.html", error=error)
 
+    
     @app.route("/dashboard")
     @login_required()
     def auth_dashboard():
         role = current_user.role
         sim = _build_sim()
         result = sim.run_all()
-        if role == "admin":
-            return render_template("admin_dashboard.html", sim=sim, result=result)
-        if role == "technician":
-            return render_template("technician_dashboard.html", sim=sim, result=result, user=current_user)
-        return render_template("reporter_dashboard.html", sim=sim, result=result, user=current_user)
+        engine_map = ticket_state.default_assignments(result)
 
+        conn = get_db_connection()
+        try:
+            rows = ticket_state.build_ticket_rows(
+                conn, _dataset().tickets, engine_map
+            )
+        finally:
+            conn.close()
+
+        if role == "admin":
+            return render_template(
+                "admin_dashboard.html",
+                sim=sim,
+                result=result,
+                ticket_rows=rows,
+                technicians=sim.technicians,
+            )
+
+        if role == "technician":
+            print("\n========== DEBUG TECHNICIAN ==========")
+            print("DEBUG TECH ID:", repr(current_user.tech_id))
+            print("DEBUG TOTAL ROWS:", len(rows))
+
+            for r in rows:
+                print(
+                    "Ticket:", r["id"],
+                    "| Assigned To:", repr(r["assigned_to"]),
+                    "| Status:", r["status"],
+                )
+
+            mine = [
+                r for r in rows
+                if r["assigned_to"] == current_user.tech_id
+            ]
+
+            print("DEBUG MY TICKETS:", [r["id"] for r in mine])
+            print("======================================\n")
+
+            return render_template(
+                "technician_dashboard.html",
+                sim=sim,
+                result=result,
+                user=current_user,
+                ticket_rows=mine,
+            )
+
+        mine = [
+            r for r in rows
+            if r["created_by"] == current_user.username
+        ]
+
+        return render_template(
+            "reporter_dashboard.html",
+            sim=sim,
+            result=result,
+            user=current_user,
+            ticket_rows=mine,
+        )
     # --- Mockup multi-role -------------------------------------------------
     # Sajikan folder mockup/ di bawah /mockup/ untuk demo online. `index.html`
     # di root mockup mengalihkan ke login.html, jadi /mockup/ = mulai dari
@@ -316,12 +424,14 @@ def create_app(data_path: Optional[str] = None, db_path: Optional[str] = None) -
                 related_id=related,
                 requested_by=requested,
             )
-            # reset cache supaya simulasi memakai dataset baru
-            _store["dataset"] = None
-            # Simpan ke data/tickets.json (satu sumber kebenaran untuk
-            # tiket + teknisi) agar perubahan persisten dan dibaca lagi
-            # oleh load_dataset() pada request berikutnya.
-            save_dataset(ds, app.config["DATA_PATH"])
+            # Simpan dataset sesuai backend yang digunakan
+            if current_app.config.get("DB_BACKEND") == "postgres":
+                save_dataset_to_db(ds)
+            else:
+                save_dataset(ds, current_app.config["DATA_PATH"])
+
+            # Perbarui cache agar simulasi menggunakan dataset terbaru
+            _store["dataset"] = ds
             flash(
                 f"Tiket {ticket.id} ({ticket.ticket_type.value}) ditambahkan "
                 f"dan dataset disimpan.",
@@ -361,12 +471,69 @@ def create_app(data_path: Optional[str] = None, db_path: Optional[str] = None) -
         }
 
         return redirect(_redirect_by_role())
+    # --- Status tiket (teknisi) dan penugasan ulang (admin) ----------------
+    def _engine_map_now():
+        return ticket_state.default_assignments(_build_sim().run_all())
+
+    @app.route("/tickets/<ticket_id>/status", methods=["POST"])
+    @login_required(role="technician")
+    def change_ticket_status(ticket_id):
+        if ticket_id not in {t.id for t in _dataset().tickets}:
+            abort(404)
+        new_status = request.form.get("status", "")
+        conn = get_db_connection()
+        try:
+            ticket_state.change_status(
+                conn, ticket_id, new_status, current_user.tech_id, _engine_map_now()
+            )
+            flash(f"Status tiket {ticket_id} diubah menjadi {new_status}.", "success")
+        except ticket_state.StateError as exc:
+            flash(str(exc), "error")
+        finally:
+            conn.close()
+        return redirect(url_for("auth_dashboard"))
+
+    @app.route("/tickets/<ticket_id>/reassign", methods=["POST"])
+    @login_required(role="admin")
+    def reassign_ticket(ticket_id):
+        ticket = next((t for t in _dataset().tickets if t.id == ticket_id), None)
+        if ticket is None:
+            abort(404)
+        sim = _build_sim()
+        valid = {t.id for t in sim.technicians}
+        conn = get_db_connection()
+        try:
+            ticket_state.reassign(
+                conn, ticket, request.form.get("technician", ""),
+                current_user.username, request.form.get("reason", ""),
+                ticket_state.default_assignments(sim.run_all()), valid,
+            )
+            flash(f"Tiket {ticket_id} dipindahkan ke {request.form.get('technician')}.",
+                  "success")
+        except ticket_state.StateError as exc:
+            flash(str(exc), "error")
+        finally:
+            conn.close()
+        return redirect(url_for("auth_dashboard"))
 
     @app.route("/reset", methods=["POST"])
     @login_required(role="admin")
     def reset_data():
-        _store["dataset"] = None
-        _store["path"] = None
+        if current_app.config.get("DB_BACKEND") == "postgres":
+            from ..seed import load_dataset, save_dataset_to_db
+
+            dataset = load_dataset(current_app.config["DATA_PATH"])
+            save_dataset_to_db(dataset)
+
+            _store["dataset"] = dataset
+            _store["path"] = (
+                "postgres",
+                current_app.config.get("DATABASE_URL"),
+            )
+        else:
+            _store["dataset"] = None
+            _store["path"] = None
+
         flash("Dataset dimuat ulang dari file.", "info")
         return redirect(url_for("index"))
 

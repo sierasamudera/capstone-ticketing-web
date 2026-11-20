@@ -123,11 +123,9 @@ def load_dataset(path: Optional[str] = None) -> Dataset:
     return _load_dataset_from_json(json_path)
 
 
-def _load_dataset_from_json(path: str) -> Dataset:
-    """Baca dataset lengkap dari file JSON (migrasi / uji isolasi)."""
-    with open(path, "r", encoding="utf-8") as f:
-        raw = json.load(f)
+def _dataset_from_dict(raw: dict) -> Dataset:
     params = _parameters_from_dict(raw["parameters"])
+
     technicians = [
         Technician(
             id=str(t["id"]),
@@ -136,9 +134,22 @@ def _load_dataset_from_json(path: str) -> Dataset:
         )
         for t in raw["technicians"]
     ]
-    tickets = [_ticket_from_dict(t) for t in raw["tickets"]]
-    return Dataset(parameters=params, technicians=technicians, tickets=tickets)
 
+    tickets = [_ticket_from_dict(t) for t in raw["tickets"]]
+
+    return Dataset(
+        parameters=params,
+        technicians=technicians,
+        tickets=tickets,
+    )
+
+
+def _load_dataset_from_json(path: str) -> Dataset:
+    """Baca dataset lengkap dari file JSON."""
+    with open(path, "r", encoding="utf-8") as f:
+        raw = json.load(f)
+
+    return _dataset_from_dict(raw)
 
 def _ticket_from_dict(d: dict) -> Ticket:
     return Ticket(
@@ -199,14 +210,12 @@ def save_dataset(dataset: Dataset, path: Optional[str] = None) -> str:
     conn.close()
     return "data/ticketing.db"
 
-
-def _save_dataset_to_json(dataset: Dataset, path: str) -> str:
-    """Simpan dataset ke file JSON (untuk uji isolasi data per test)."""
-    import json as _json
-
-    raw = {
+def _dataset_to_dict(dataset: Dataset) -> dict:
+    return {
         "parameters": {
-            "priority_weights": {k.value: v for k, v in dataset.parameters.priority_weights.items()},
+            "priority_weights": {
+                k.value: v for k, v in dataset.parameters.priority_weights.items()
+            },
             "shift_start": dataset.parameters.shift_start.strftime("%Y-%m-%d %H:%M:%S"),
             "busy_penalty": dataset.parameters.busy_penalty,
             "distribution_rule": dataset.parameters.distribution_rule,
@@ -237,11 +246,90 @@ def _save_dataset_to_json(dataset: Dataset, path: str) -> str:
             for t in dataset.tickets
         ],
     }
+
+def _save_dataset_to_json(dataset: Dataset, path: str) -> str:
+    raw = _dataset_to_dict(dataset)
+
     with open(path, "w", encoding="utf-8") as f:
-        _json.dump(raw, f, ensure_ascii=False, indent=2)
+        json.dump(raw, f, ensure_ascii=False, indent=2)
+
     return path
 
+def load_dataset_from_db(seed_path: str = DEFAULT_DATA_PATH) -> Dataset:
+    """Baca dataset dari PostgreSQL; impor JSON hanya jika database masih kosong."""
+    from .db import get_db_connection
 
+    conn = get_db_connection()
+
+    try:
+        row = conn.execute(
+            "SELECT payload FROM dataset_store WHERE id = 1"
+        ).fetchone()
+
+        if row is not None:
+            raw = row["payload"]
+
+            if isinstance(raw, str):
+                raw = json.loads(raw)
+
+            return _dataset_from_dict(raw)
+
+        # Jika dataset belum ada di PostgreSQL, ambil dari JSON
+        dataset = _load_dataset_from_json(seed_path)
+        raw = _dataset_to_dict(dataset)
+
+        conn.execute(
+            """
+            INSERT INTO dataset_store (id, payload, updated_at)
+            VALUES (1, ?::jsonb, CURRENT_TIMESTAMP)
+            ON CONFLICT (id) DO NOTHING
+            """,
+            (json.dumps(raw, ensure_ascii=False),),
+        )
+
+        conn.commit()
+
+        # Ambil kembali dataset yang tersimpan
+        row = conn.execute(
+            "SELECT payload FROM dataset_store WHERE id = 1"
+        ).fetchone()
+
+        stored = row["payload"]
+
+        if isinstance(stored, str):
+            stored = json.loads(stored)
+
+        return _dataset_from_dict(stored)
+
+    finally:
+        conn.close()
+
+def save_dataset_to_db(dataset: Dataset) -> None:
+    """Simpan seluruh dataset ke PostgreSQL JSONB."""
+    from .db import get_db_connection
+
+    raw = _dataset_to_dict(dataset)
+    payload = json.dumps(raw, ensure_ascii=False)
+
+    conn = get_db_connection()
+
+    try:
+        conn.execute(
+            """
+            INSERT INTO dataset_store (id, payload, updated_at)
+            VALUES (1, ?::jsonb, CURRENT_TIMESTAMP)
+            ON CONFLICT (id)
+            DO UPDATE SET
+                payload = EXCLUDED.payload,
+                updated_at = CURRENT_TIMESTAMP
+            """,
+            (payload,),
+        )
+
+        conn.commit()
+
+    finally:
+        conn.close()
 # ---------------------------------------------------------------------------
 # Generator ID otomatis (counter terpisah per prefix)
 # ---------------------------------------------------------------------------

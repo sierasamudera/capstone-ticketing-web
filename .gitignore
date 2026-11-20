@@ -5,3 +5,14 @@ generate_docx.py
 
 __pycache__/
 *.pyc
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Local environment and databases
+.env
+.env.*
+!.env.example
+data/*.db
